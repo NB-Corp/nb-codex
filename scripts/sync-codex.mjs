@@ -32,7 +32,7 @@ const usage = `Usage:
   node scripts/sync-codex.mjs diff [--home <path>]
   node scripts/sync-codex.mjs push [--dry-run] [--force] [--home <path>]
   node scripts/sync-codex.mjs pull [--dry-run] [--force] [--home <path>]
-  node scripts/sync-codex.mjs portable init --home <path> [--codex-cli <path>] [--adopt <name=path>] [--reconfigure]
+  node scripts/sync-codex.mjs portable init --home <path> [--codex-cli <path>] [--reconfigure]
   node scripts/sync-codex.mjs portable plan [--replace-managed]
   node scripts/sync-codex.mjs portable apply [--replace-managed]
   node scripts/sync-codex.mjs portable doctor
@@ -71,9 +71,7 @@ function parseArgs(argv) {
     homeExplicit: Boolean(process.env.CODEX_HOME),
     replaceManaged: false,
     reconfigure: false,
-    codexCli: null,
-    productFeedbackDataRoot: null,
-    adoptions: {}
+    codexCli: null
   };
 
   while (args.length) {
@@ -91,17 +89,6 @@ function parseArgs(argv) {
       const value = args.shift();
       if (!value) fail("--codex-cli requires a path");
       options.codexCli = expandHome(value);
-    } else if (arg === "--product-feedback-data-root") {
-      const value = args.shift();
-      if (!value) fail("--product-feedback-data-root requires a path");
-      options.productFeedbackDataRoot = expandHome(value);
-    } else if (arg === "--adopt") {
-      const value = args.shift();
-      const equals = value?.indexOf("=") ?? -1;
-      if (equals <= 0 || equals === value.length - 1) fail("--adopt requires NAME=ABSOLUTE_PATH");
-      const name = value.slice(0, equals);
-      if (Object.hasOwn(options.adoptions, name)) fail(`duplicate --adopt component: ${name}`);
-      options.adoptions[name] = expandHome(value.slice(equals + 1));
     } else if (arg === "--help" || arg === "-h") {
       console.log(usage);
       process.exit(0);
@@ -118,8 +105,7 @@ function parseArgs(argv) {
     console.log(usage);
     process.exit(command ? 1 : 0);
   }
-  if (command !== "portable" && (options.replaceManaged || options.reconfigure || options.codexCli ||
-      options.productFeedbackDataRoot || Object.keys(options.adoptions).length)) {
+  if (command !== "portable" && (options.replaceManaged || options.reconfigure || options.codexCli)) {
     fail("portable-only option used with status/diff/push/pull");
   }
   if (command === "portable" && portableCommand === "init" && options.replaceManaged) {
@@ -127,8 +113,6 @@ function parseArgs(argv) {
   }
   options.home = path.resolve(expandHome(options.home));
   if (options.codexCli) options.codexCli = path.resolve(options.codexCli);
-  if (options.productFeedbackDataRoot) options.productFeedbackDataRoot = path.resolve(options.productFeedbackDataRoot);
-  for (const [name, root] of Object.entries(options.adoptions)) options.adoptions[name] = path.resolve(root);
   return options;
 }
 
@@ -1721,18 +1705,15 @@ async function runPortable(options) {
       configPath,
       home: options.home,
       codexCli: options.codexCli,
-      productFeedbackDataRoot: options.productFeedbackDataRoot,
-      adoptions: options.adoptions,
       reconfigure: options.reconfigure
     });
     console.log(`portable config: ${configPath}`);
     console.log(`selected home:   ${config.codexHome}`);
     console.log(`portable core:   ready; selected home unchanged`);
-    console.log(`external:        ${Object.keys(config.adoptions).length ? Object.keys(config.adoptions).sort().join(", ") : "none"}`);
     return;
   }
-  if (options.codexCli || options.productFeedbackDataRoot || Object.keys(options.adoptions).length) {
-    fail("--codex-cli, --product-feedback-data-root, and --adopt are portable init options");
+  if (options.codexCli) {
+    fail("--codex-cli is a portable init option");
   }
   if (options.reconfigure) fail("--reconfigure is only valid with portable init");
   const config = await loadRuntimeConfig(systemRoot, configPath);
@@ -1766,7 +1747,6 @@ async function runPortable(options) {
   const result = await doctorRuntime({ baseDir: systemRoot, config });
   console.log(`portable ${options.portableCommand}: ok`);
   console.log(`managed: ${result.fileCount} files, ${result.linkCount} links`);
-  console.log(`external: ${result.externalComponents.length ? result.externalComponents.join(", ") : "optional components disabled"}`);
 }
 
 async function routePortableOwnedLegacyHome(options) {

@@ -19,9 +19,7 @@ import {
   buildOverlaySpec,
   configOverlayValid as structuralConfigOverlayValid,
   managedConfigConflict as structuralManagedConfigConflict,
-  parseScalar,
   renderConfig as renderStructuralConfig,
-  scanToml,
 } from './toml-overlay.mjs';
 import { createDirectoryLinkSync, writeBackupBytesSync } from './runtime-fs.mjs';
 
@@ -222,30 +220,10 @@ async function loadPortableProfile(baseDir) {
   if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 3 || agentFiles.length !== 7 || coreSkills.length !== 1) {
     fail('canonical manifest must resolve to 3 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
   }
-  if (!profile.externalComponents || typeof profile.externalComponents !== 'object') fail('portable profile externalComponents is invalid');
-  for (const [name, component] of Object.entries(profile.externalComponents)) {
-    if (!component || typeof component !== 'object' || typeof component.owner !== 'string' ||
-        !Object.hasOwn(component, 'source') || !Object.hasOwn(component, 'ref') ||
-        component.required !== false || component.enabledByDefault !== false) {
-      fail(`portable external component metadata is invalid: ${name}`);
-    }
-    safeRelative(component.runtimePath, `portable external runtime path ${name}`);
-    if (component.sourceSubpath) safeRelative(component.sourceSubpath, `portable external source path ${name}`);
-    if (component.sharedPromptSource) safeRelative(component.sharedPromptSource, `portable external prompt source ${name}`);
-    if (component.sharedPromptRuntime) safeRelative(component.sharedPromptRuntime, `portable external prompt runtime ${name}`);
-    if (component.roles !== undefined) {
-      if (!Array.isArray(component.roles) || component.roles.length === 0) fail(`portable external roles are invalid: ${name}`);
-      const roleNames = new Set();
-      const roleFiles = new Set();
-      for (const role of component.roles) {
-        if (!role || typeof role.name !== 'string' || typeof role.file !== 'string') fail(`portable external role is invalid: ${name}`);
-        const roleFile = safeRelative(role.file, `portable external role file ${name}`);
-        if (roleFile.includes('/') || roleNames.has(role.name) || roleFiles.has(roleFile)) fail(`portable external role duplicates or nests a file: ${name}`);
-        roleNames.add(role.name);
-        roleFiles.add(roleFile);
-      }
-    }
+  if (!profile.externalComponents || typeof profile.externalComponents !== 'object' || Array.isArray(profile.externalComponents)) {
+    fail('portable profile externalComponents is invalid');
   }
+  if (Object.keys(profile.externalComponents).length !== 0) fail('portable profile must not declare external components');
   return {
     manifest: { ...profile, syncManifest: syncManifestRel, exactFiles, agentFiles, coreSkills, coreSkillFiles, seedIfAbsent: [{ repo: seedRepo, home: seedHome }] },
     bytes: await readFile(file),
@@ -257,37 +235,31 @@ async function loadPortableProfile(baseDir) {
 function validateRuntimeConfig(config, configPath) {
   if (config?.schemaVersion !== LOCAL_CONFIG_SCHEMA) fail(`${configPath} schemaVersion must be ${LOCAL_CONFIG_SCHEMA}; run portable init`);
   config.codexHome = absolute(config.codexHome, 'codexHome');
-  if (config.productFeedbackDataRoot !== null && config.productFeedbackDataRoot !== undefined) {
-    config.productFeedbackDataRoot = absolute(config.productFeedbackDataRoot, 'productFeedbackDataRoot');
-  } else config.productFeedbackDataRoot = null;
+  if (config.productFeedbackDataRoot) fail('this installer does not adopt external components');
+  delete config.productFeedbackDataRoot;
+  if (config.adoptions && typeof config.adoptions === 'object' && !Array.isArray(config.adoptions) && Object.keys(config.adoptions).length) {
+    fail('this installer does not adopt external components');
+  }
+  delete config.adoptions;
   if (config.codexCli !== null && config.codexCli !== undefined) config.codexCli = absolute(config.codexCli, 'codexCli');
   else config.codexCli = null;
-  if (!config.adoptions || typeof config.adoptions !== 'object' || Array.isArray(config.adoptions)) config.adoptions = {};
-  for (const [name, root] of Object.entries(config.adoptions)) config.adoptions[name] = absolute(root, `adoption ${name}`);
   return config;
 }
 
-export async function initializeRuntime({ baseDir, configPath = path.join(baseDir, LOCAL_CONFIG_FILE), home, productFeedbackDataRoot = null, codexCli = null, adoptions = {}, reconfigure = false }) {
+export async function initializeRuntime({ baseDir, configPath = path.join(baseDir, LOCAL_CONFIG_FILE), home, codexCli = null, reconfigure = false }) {
   const selectedHome = absolute(home, '--home or CODEX_HOME');
   const configExists = await exists(configPath);
   const old = configExists
     ? validateRuntimeConfig(await readJson(configPath, configPath), configPath)
     : null;
   const preserveExisting = reconfigure && old !== null;
-  const selectedFeedback = productFeedbackDataRoot === null
-    ? (preserveExisting ? old.productFeedbackDataRoot : null)
-    : absolute(productFeedbackDataRoot, '--product-feedback-data-root');
   const selectedCli = codexCli === null
     ? (preserveExisting ? old.codexCli : null)
     : absolute(codexCli, '--codex-cli');
-  const selectedAdoptions = preserveExisting ? { ...old.adoptions } : {};
-  for (const [name, root] of Object.entries(adoptions)) selectedAdoptions[name] = absolute(root, `--adopt ${name}`);
   const next = {
     schemaVersion: LOCAL_CONFIG_SCHEMA,
     codexHome: selectedHome,
-    productFeedbackDataRoot: selectedFeedback,
     codexCli: selectedCli,
-    adoptions: selectedAdoptions,
   };
   if (configExists) {
     const current = await readFile(configPath, 'utf8');
@@ -300,75 +272,6 @@ export async function initializeRuntime({ baseDir, configPath = path.join(baseDi
   if (!samePath(path.dirname(configPath), baseDir)) fail('portable init writes only the repository-owned ignored local config');
   await writeJson(configPath, next);
   return next;
-}
-
-async function validateFeedback(skillRoot, dataRoot) {
-  await assertOrdinaryExistingDirectory(dataRoot, 'product feedback data root');
-  await assertOrdinaryExistingDirectory(skillRoot, 'product feedback skill root');
-  if (inside(skillRoot, dataRoot) || inside(dataRoot, skillRoot)) {
-    fail('product feedback skill and data roots must be separate directory trees');
-  }
-  const cli = path.join(skillRoot, 'scripts', 'product-feedback-cli', 'cli.mjs');
-  const result = spawnSync(process.execPath, [cli, 'doctor', '--root', dataRoot], {
-    encoding: 'utf8',
-    windowsHide: true,
-    maxBuffer: 16 * 1024 * 1024,
-  });
-  if (result.error) fail(`cannot run adopted product feedback doctor: ${result.error.message}`);
-  if (result.status !== 0) fail(`adopted product feedback doctor failed: ${(result.stderr || result.stdout).trim()}`);
-  return { command: `${process.execPath} ${cli} doctor --root ${dataRoot}`, output: result.stdout.trim() };
-}
-
-async function validateScienceAdoption(profile, scienceRoot) {
-  const component = profile.externalComponents['science-agents'];
-  if (!component || !Array.isArray(component.roles) || component.roles.length !== 5) {
-    fail('portable science component must declare exactly five roles');
-  }
-  const agentsRoot = path.join(scienceRoot, ...component.sourceSubpath.split('/'));
-  await assertOrdinaryExistingDirectory(agentsRoot, 'science agents root');
-  const expectedFiles = new Set(component.roles.map((role) => role.file));
-  const observedToml = [];
-  const observedCaseKeys = new Set();
-  async function inventoryToml(current, relative) {
-    for (const entry of await readdir(current, { withFileTypes: true })) {
-      const target = path.join(current, entry.name);
-      const rel = relative ? `${relative}/${entry.name}` : entry.name;
-      if (entry.isSymbolicLink()) fail(`science agents inventory contains a symbolic link: ${rel}`);
-      if (entry.isDirectory()) {
-        await inventoryToml(target, rel);
-        continue;
-      }
-      if (!entry.isFile()) fail(`science agents inventory contains a special file: ${rel}`);
-      if (!entry.name.toLowerCase().endsWith('.toml')) continue;
-      const caseKey = rel.toLowerCase();
-      if (observedCaseKeys.has(caseKey)) fail(`science role inventory contains duplicate case-insensitive paths: ${rel}`);
-      observedCaseKeys.add(caseKey);
-      observedToml.push(rel);
-    }
-  }
-  await inventoryToml(agentsRoot, '');
-  const missing = [...expectedFiles].filter((name) => !observedToml.includes(name));
-  const extra = observedToml.filter((name) => !expectedFiles.has(name));
-  if (missing.length || extra.length) {
-    fail(`science role inventory mismatch (missing: ${missing.join(', ') || 'none'}; extra: ${extra.join(', ') || 'none'})`);
-  }
-  for (const role of component.roles) {
-    const source = path.join(agentsRoot, role.file);
-    await assertOrdinaryExistingFile(source, `science role ${role.name}`);
-    const document = scanToml(await readFile(source, 'utf8'));
-    const names = document.assignments.filter((assignment) => assignment.path === 'name');
-    if (names.length !== 1) fail(`science role must declare one top-level name: ${role.file}`);
-    let actual;
-    try {
-      actual = parseScalar(names[0].valueText);
-    } catch (error) {
-      fail(`science role name is invalid in ${role.file}: ${error.message}`);
-    }
-    if (actual !== role.name) fail(`science role identity mismatch: ${role.file} declares ${actual}`);
-  }
-  const sharedPrompt = path.join(scienceRoot, ...component.sharedPromptSource.split('/'));
-  await assertOrdinaryExistingFile(sharedPrompt, 'science shared prompt');
-  if ((await readFile(sharedPrompt)).length === 0) fail('science shared prompt must not be empty');
 }
 
 function codexInvocation(config) {
@@ -510,17 +413,6 @@ async function buildLinkPlan(baseDir, manifest, config) {
       expectedFiles: manifest.coreSkillFiles[skill],
     });
   }
-  const feedbackRoot = config.adoptions['product-feedback'];
-  if (feedbackRoot) links.push({ relative: 'skills/product-feedback', source: feedbackRoot, owner: 'ProductStewardship' });
-  const scienceRoot = config.adoptions['science-agents'];
-  if (scienceRoot) {
-    const component = manifest.externalComponents['science-agents'];
-    links.push({
-      relative: component.runtimePath,
-      source: path.join(scienceRoot, ...component.sourceSubpath.split('/')),
-      owner: component.owner,
-    });
-  }
   for (const item of links) {
     await assertOrdinaryExistingDirectory(item.source, `runtime source ${item.relative}`);
     item.sourceRealpath = portable(await realpath(item.source));
@@ -549,9 +441,7 @@ function markerRuntimeConfig(config) {
   return {
     schemaVersion: LOCAL_CONFIG_SCHEMA,
     codexHome: portable(config.codexHome),
-    productFeedbackDataRoot: config.productFeedbackDataRoot ? portable(config.productFeedbackDataRoot) : null,
     codexCli: config.codexCli ? portable(config.codexCli) : null,
-    adoptions: Object.fromEntries(Object.entries(config.adoptions).sort().map(([name, root]) => [name, portable(root)])),
   };
 }
 
@@ -653,28 +543,6 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
   if (inside(baseDir, config.codexHome) || inside(config.codexHome, baseDir)) {
     fail('selected CODEX_HOME and repository must be separate directory trees');
   }
-  for (const name of Object.keys(config.adoptions)) {
-    if (!Object.hasOwn(manifest.externalComponents, name)) fail(`unknown adopted external component: ${name}`);
-  }
-  if (Boolean(config.productFeedbackDataRoot) !== Boolean(config.adoptions['product-feedback'])) {
-    fail('Product Feedback adoption requires both --adopt product-feedback=<skill-root> and --product-feedback-data-root');
-  }
-  for (const [key, root] of Object.entries(config.adoptions)) {
-    if (inside(baseDir, root) || inside(root, baseDir)) {
-      fail(`adopted component ${key} and repository must be separate directory trees`);
-    }
-    if (inside(root, config.codexHome) || inside(config.codexHome, root)) {
-      fail(`selected CODEX_HOME and adopted component ${key} must be separate directory trees`);
-    }
-  }
-  if (config.productFeedbackDataRoot &&
-      (inside(config.codexHome, config.productFeedbackDataRoot) || inside(config.productFeedbackDataRoot, config.codexHome))) {
-    fail('product feedback data root and selected CODEX_HOME must be separate directory trees');
-  }
-  if (config.productFeedbackDataRoot &&
-      (inside(baseDir, config.productFeedbackDataRoot) || inside(config.productFeedbackDataRoot, baseDir))) {
-    fail('product feedback data root and repository must be separate directory trees');
-  }
   for (const parent of ['agents', 'prompts', 'skills']) {
     const target = path.join(config.codexHome, parent);
     await assertSafeExistingAncestors(target, `managed parent ${parent}`);
@@ -683,9 +551,6 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
       if (stat.isSymbolicLink() || !stat.isDirectory()) fail(`managed parent is unsafe: ${target}`);
     }
   }
-  let feedbackDoctor = null;
-  if (config.productFeedbackDataRoot) feedbackDoctor = await validateFeedback(config.adoptions['product-feedback'], config.productFeedbackDataRoot);
-  if (config.adoptions['science-agents']) await validateScienceAdoption(manifest, config.adoptions['science-agents']);
   const featureProbe = await probeFeatures(baseDir, config);
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
@@ -753,8 +618,6 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     selectedHome: portable(config.codexHome),
     codexCli: config.codexCli ? portable(config.codexCli) : 'PATH:codex',
     replaceManaged,
-    productFeedbackDataRoot: config.productFeedbackDataRoot ? portable(config.productFeedbackDataRoot) : null,
-    adoptions: Object.fromEntries(Object.entries(config.adoptions).sort().map(([name, root]) => [name, portable(root)])),
   };
   const plan = {
     schemaVersion: 1,
@@ -770,7 +633,6 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     sourceIdentity,
     targetIdentity,
     featureProbe: { command: featureProbe.command, stdoutSha256: featureProbe.stdoutSha256, exposed: spec.exposed },
-    feedbackDoctor,
     files: fileEntries,
     seeds: [{
       relative: seed.relative,
@@ -1046,8 +908,6 @@ export async function applyInstallPlan({ baseDir, config, replaceManaged = false
 
 export async function doctorRuntime({ baseDir, config }) {
   const { manifest, bytes: profileBytes, syncManifest, syncManifestBytes } = await loadPortableProfile(baseDir);
-  if (config.productFeedbackDataRoot) await validateFeedback(config.adoptions['product-feedback'], config.productFeedbackDataRoot);
-  if (config.adoptions['science-agents']) await validateScienceAdoption(manifest, config.adoptions['science-agents']);
   const featureProbe = await probeFeatures(baseDir, config);
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
@@ -1089,7 +949,6 @@ export async function doctorRuntime({ baseDir, config }) {
   return {
     fileCount: desired.length,
     linkCount: links.length,
-    externalComponents: Object.keys(config.adoptions).sort(),
     features: spec.exposed,
   };
 }

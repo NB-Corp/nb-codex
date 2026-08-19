@@ -28,6 +28,10 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.equal(portableProfile.id, "portable-core");
   assert.deepEqual(portableProfile.seedIfAbsent, [{ repo: "templates/AGENTS.md", home: "AGENTS.md" }]);
   assert.deepEqual(portableProfile.externalComponents, {});
+  const runtimeSource = await readFile(path.join(projectRoot, "src", "portable-runtime.mjs"), "utf8");
+  assert.doesNotMatch(runtimeSource, /ProductStewardship|science-agents|product-feedback-cli|validateScienceAdoption|validateFeedback/);
+  const installerSource = await readFile(path.join(projectRoot, "scripts", "sync-codex.mjs"), "utf8");
+  assert.doesNotMatch(installerSource, /--adopt|--product-feedback-data-root/);
   assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md" || entry.repo === "templates/AGENTS.md" || entry.home === "AGENTS.md"), false);
   assert.equal(manifest.files.some((entry) => entry.repo.includes("nia")), false);
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath, "prompts/system-prompt-neutral.md");
@@ -431,13 +435,31 @@ test("doctor detects managed file, config, and link tamper", async () => {
   assert.match(run(markerCase, ["portable", "doctor"]).stderr, /ownership marker is stale or modified/);
 });
 
-test("unknown external adoptions are refused", async () => {
+test("portable installer rejects external adoption flags", async () => {
   const item = await fixture("unknown-adopt");
-  okay(run(item, [
+  const adopt = run(item, [
     "portable", "init", "--home", item.home, "--codex-cli", item.codexCli,
-    "--adopt", `science-agents=${item.root}`
-  ]), "init may record the locator");
+    "--adopt", `other=${item.root}`
+  ]);
+  assert.notEqual(adopt.status, 0);
+  assert.match(adopt.stderr, /unknown argument: --adopt/);
+
+  const feedback = run(item, [
+    "portable", "init", "--home", item.home, "--codex-cli", item.codexCli,
+    "--product-feedback-data-root", item.root
+  ]);
+  assert.notEqual(feedback.status, 0);
+  assert.match(feedback.stderr, /unknown argument: --product-feedback-data-root/);
+});
+
+test("portable plan refuses leftover external adoptions in local config", async () => {
+  const item = await fixture("stale-adopt");
+  await initialize(item);
+  const configPath = path.join(item.baseDir, ".nb-codex.local.json");
+  const config = JSON.parse(await readFile(configPath, "utf8"));
+  config.adoptions = { other: item.root };
+  await writeFile(configPath, `${JSON.stringify(config, null, 2)}\n`);
   const plan = run(item, ["portable", "plan"]);
   assert.notEqual(plan.status, 0);
-  assert.match(plan.stderr, /unknown adopted external component/);
+  assert.match(plan.stderr, /does not adopt external components/);
 });
