@@ -25,7 +25,7 @@ api_contract  implement  writes src/api/**       depends none
 ui_consumer   implement  writes src/ui/**        depends api_contract receipt
 docs          implement  writes docs/feature.md  depends api_contract receipt
 integrate     implement  writes shared registry depends ui_consumer, docs
-review        check      writes NONE             depends integrate receipt
+review        reviewer   writes NONE             depends integrate receipt
 ```
 
 Only ready nodes run. If the UI and docs can consume the accepted contract
@@ -33,7 +33,7 @@ independently, they may run together. The `integrate` owner starts after their
 overlapping ownership ends, alone edits the shared registry, and runs directly
 affected integration proof. The root remains coordination-only through that
 receipt. The single `review` node covers the integrated coherent milestone;
-do not add a checker for each leaf unless the always-loaded verification kernel
+do not add a reviewer for each leaf unless the always-loaded verification kernel
 admits separate review for genuinely independent risk domains.
 
 ## Broad exploration, narrow writes
@@ -51,28 +51,20 @@ when specialization, context isolation, or parallel readiness repays the fixed
 briefing, repository-read, verification, and integration cost. Prefer one
 capable owner over five file-based leaves.
 
-## Material frame audit
+## Frame doubt before a costly rewrite
 
-Before committing to a costly repository-wide rewrite, the parent notices that
-its proposed scope comes from an inferred diagnosis rather than an explicit
-user outcome. It dispatches `critic` once with the exact relevant user
-excerpts, the proposed frame labeled as provisional, primary repository
-anchors, and the decision boundary. The brief asks for an evidence-grounded
-verdict rather than disagreement. The parent adopts a supported revision,
-rejects it with counterevidence, or opens a user decision door.
-
-Do not add this node because the rewrite is large, slow, at a candidate
-boundary, or already has a checker. Do not dispatch another critic for the same unchanged frame; reuse the
-first runtime thread only when new evidence arrives inside its warm, causally
-adjacent lease. If that thread is stale, a same-role successor continues from
-the prior report rather than supplying another independent vote.
+Before committing to a costly rewrite whose scope comes from an inferred
+diagnosis, dispatch `think` with an analysis-only brief: exact user intent,
+the proposed frame labeled provisional, and the decision that audit may
+change. Frame audit stays on `think` with an analysis-only brief; do not invent another review seat. Adopt a supported revision,
+reject it with counterevidence, or open a user decision door.
 
 ## Warm reviewer repair loop
 
-`check` reports `F1` against the API candidate owned by
+`reviewer` reports `F1` against the API candidate owned by
 `api_contract`. Use `followup_task` on the original implementation owner with
 `F1`, its anchor, and the accepted contract. After its focused repair receipt,
-use `followup_task` on the same checker to recheck `F1`. The root does not patch
+use `followup_task` on the same reviewer to recheck `F1`. The root does not patch
 the defect or launch a replacement reviewer for convenience. Both runtime
 threads remain warm because the candidate, contract, and immediate repair loop
 are unchanged.

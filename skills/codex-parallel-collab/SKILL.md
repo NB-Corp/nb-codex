@@ -1,118 +1,114 @@
 ---
 name: codex-parallel-collab
-description: Coordinate Codex subagents with named role ownership, proactive capability-aware delegation, integration ownership, wait-state discipline, and reviewer repair loops. Use when the user asks for parallel agents, multi-agent collaboration, delegated implementation, or an ownership DAG, or when substantial work benefits from a coherent delegated owner, parallel leaves, context isolation, specialization, or independent evidence. Do not use for a small edit merely because it touches several files.
+description: Coordinate nb-codex subagents with named role ownership, proactive capability-aware delegation, integration ownership, wait-state discipline, and reviewer repair loops. Use when the user asks for parallel agents, multi-agent collaboration, delegated implementation, or an ownership DAG, or when substantial work benefits from a coherent delegated owner, parallel leaves, context isolation, specialization, or independent evidence. Do not use for a small edit merely because it touches several files.
 metadata:
-  short-description: Coordinate named Codex owners without shadow work
+  short-description: Coordinate named nb-codex owners without shadow work
 ---
 
 # Codex Parallel Collaboration
 
-Use this skill for the **method and tools** of collaboration. The always-loaded global instruction kernel already decides routine ownership and verification; do not restate or reinterpret that governance here. Load `policies/collaboration.md` only for its named edge doors and `policies/verification.md` only for its named risk/evidence doors.
+这是 nb-codex 的协作**方法与工具**。治理以全局 `AGENTS.md` 为准；本 skill 不改写拓扑、验证内核或边界协议。工具名按 Codex 硬编码：`spawn_agent`、`wait_agent`、`followup_task`、`send_message`、`list_agents`、`interrupt_agent`。
+
+维护角色（不要用内置 `default` / `explorer` / `worker`）：
+
+| Need | Role | Model pin | Topology |
+| --- | --- | --- | --- |
+| 不熟悉代码的只读地图 | `explore` | luna + priority | leaf |
+| 范围清楚的快速执行 | `executor` | grok-4.6 | leaf |
+| 复杂 / 契约重实现 | `implement` | gpt-5.6-sol | 可租 `explore` |
+| UI 审美切片 | `frontend` | grok-4.6 | 可租 `explore` |
+| 难架构 / 根因 / 精细改动 | `think` | gpt-5.6-sol | 可租 `explore` / `research` / `executor` |
+| 检索与综合 | `research` | grok-4.6 | leaf |
+| 独立 candidate 判断 | `reviewer` | gpt-5.6-sol | leaf |
+
+能力、sandbox、子角色 allowlist 以 `$CODEX_HOME/agents/<role>.toml` 为准。
 
 ## 1. Map The Ownership Graph
 
-Start from the requested outcome and current repository evidence. Inspect relevant project rules, `git status --short`, existing diffs, shared registries or generated mirrors, and the minimum code/docs needed to identify coherent responsibilities.
+从请求结果和仓库证据出发。看相关项目规则、`git status --short`、已有 diff、共享 registry 或生成镜像，以及识别连贯职责所需的最少代码。
 
-Write a compact graph before dispatch when more than one node exists:
+多于一个节点时，先写一张紧凑图：
 
 ```text
 node              owner       writes             depends             closing evidence
 api_contract      implement   src/api/**         none                focused contract tests
-ui_consumer       implement   src/ui/**          api_contract        consumer scenario
+ui_consumer       frontend    src/ui/**          api_contract        consumer scenario
 integration       implement   shared registry    api, ui receipts    affected integration proof
 ```
 
-Nodes represent independently verifiable responsibilities, not files. Mark shared sources and the integration owner explicitly. Only ready nodes with disjoint writes may run together. Keep a single coherent vertical slice with one capable owner when splitting would create repeated context or ambiguous assembly.
+节点是可独立验证的职责，不是文件。共享源和 integration owner 要标明。只有写入不相交的 ready 节点才一起跑。能由一个有能力的 owner 做完的连贯竖切，不要拆。
 
-## 2. Select A Capability
+## 2. Dispatch
 
-Use the maintained role permitted by the current global topology:
-
-| Need | Role |
-| --- | --- |
-| Bounded unfamiliar-code ownership map | `explore` |
-| Coherent repository implementation or integration | `implement` |
-| Difficult architecture, root cause, or safety-sensitive problem ownership | `think` |
-| Material frame audit at the collaboration-policy door | `critic` |
-| Conditional retrieval and synthesis | `research` |
-| Exact finite local transformation allowed by its profile | `worker_lite` |
-| Independent candidate judgment admitted by the verification kernel | `check` |
-| Scientific inquiry, experiment, literature, manuscript, or review | matching `science_*` role |
-
-Read the installed role profile when capability, sandbox, write authority, or child allowlist is uncertain. Let the profile supply model, reasoning, sandbox, and tools unless the user or project contract explicitly requires an override.
-
-## 3. Dispatch With The Inline Brief
-
-Ordinary dispatch needs no separate reference read. Put this minimal contract directly in the tool call:
+普通 dispatch 把合同直接写进 `spawn_agent`：
 
 ```text
 Purpose: <one bounded outcome>
 Depends on: <accepted inputs/receipts or none>
-Owner: <agent_type>
+Owner: <explore|executor|implement|frontend|think|research|reviewer>
 Edit allowlist: <soft behavioral paths or NONE>
 Read / write / forbidden scope: <clear boundaries>
 Inputs and decisions: <only current authoritative context>
 Side effects: <allowed commands and forbidden external actions>
 Acceptance: <observable facts>
 Verification: <focused evidence this node owns>
-Receipt: <follow the parent-internal AGENTS receipt contract; add only node-specific fields>
+Receipt: <follow the AGENTS receipt contract; add only node-specific fields>
 Stop: <completion, blocked decision, or safe handoff condition>
 ```
 
-For a public-artifact node, identify the deliverable separately from private execution context and route `Acceptance` to the runtime system prompt's `Public-Facing Content`; no brief or receipt field is artifact-ready prose.
+稳定小写 `task_name`，显式 `agent_type`，可用时 `fork_turns="none"`。brief 必须自包含；不要传 raw 会话或期望结论。引用已接受的先前工作，只带会改变当前决策的已接受字段。
 
-Use a stable lowercase `task_name`, explicit `agent_type`, and `fork_turns="none"` when available. The brief must be self-contained; do not pass raw conversation history or a desired conclusion. Reference accepted prior work and include only accepted fields that can change the current decision instead of pasting narrative receipt bodies or asking the child to rediscover them.
+公开产物节点把 deliverable 与 private execution context 分开，`Acceptance` 路由到 runtime system prompt 的 `Public-Facing Content`。
 
-For `spawn_agent`, dispatch all currently ready disjoint nodes, then record their returned canonical task names. For related evidence after a dispatch, use `send_message`; it does not start a new turn. Use `followup_task` only for a warm, causally adjacent continuation allowed by the owner-lease edge protocol.
+对当前所有 ready、写入不相交的节点一次 `spawn_agent`，记下返回的 canonical task name。dispatch 之后的相关证据用 `send_message`；它不新开一轮。仅当 AGENTS「协作边界」允许温热、因果相邻的续作时才用 `followup_task`。
 
-## 4. Coordinate Without Re-Execution
+## 3. Coordinate Without Re-Execution
 
-After dispatch, keep a small ledger:
+dispatch 后保留小账本：
 
 ```text
 node | canonical agent path | state | dependency result | owned paths
 ```
 
-Use `wait_agent` with a practical timeout measured as a polling interval, not an execution deadline. When a receipt arrives:
+`wait_agent` 的超时是轮询间隔，不是执行期限。receipt 到达后：
 
-1. confirm the parent-internal receipt satisfies the applicable AGENTS contract;
-2. compare its claimed scope with the declared ownership boundary;
-3. record residual risks and which evidence remains reusable;
-4. dispatch newly unblocked, non-overlapping nodes; and
-5. continue waiting if active dependencies remain.
+1. 确认 parent-internal receipt 满足 AGENTS 合同；
+2. 把声称范围与声明的 ownership 边界对照；
+3. 记录残余风险和仍可复用的证据；
+4. 派发新解锁、互不重叠的节点；
+5. 仍有活动依赖就继续等。
 
-Use `list_agents` only for a real liveness or ownership question, not routine polling. For steering, takeover, interruption, or a beyond-node delta, stop and follow the collaboration policy's matching edge protocol rather than improvising with tools.
+`list_agents` 只用于真实的存活或 ownership 问题，不作例行轮询。steering、takeover、interruption 或超出节点的 delta，停下来走 AGENTS「协作边界」，不要用工具即兴发挥。`interrupt_agent` 只在当前用户明确要求终止那个特定 agent 时使用。
 
-## 5. Integrate Shared Sources Once
+## 4. Integrate Shared Sources Once
 
-When a DAG converges, give the declared integration owner the accepted leaf receipts, current shared-file diff, generated-mirror obligations, unresolved mechanical conflicts, and directly affected proof. The integration node should:
+DAG 汇合时，把已接受的 leaf receipt、当前共享文件 diff、生成镜像义务、未解决的机械冲突和直接受影响证明交给已声明的 integration owner。该节点应：
 
-- assemble only after overlapping leaf ownership ends;
-- preserve unrelated work and accepted semantic choices;
-- repair cross-slice mechanics inside its boundary;
-- regenerate only affected projections; and
-- run proof invalidated by assembly rather than replaying every leaf check.
+- 只在重叠 leaf ownership 结束后装配；
+- 保留无关工作和已接受的语义选择；
+- 在边界内修复跨切片机械问题；
+- 只重新生成受影响投影；
+- 跑装配使之失效的证明，而不是重放每个 leaf 检查。
 
-The integration receipt is the candidate receipt used for the next verdict. Root evaluates that receipt and the visible boundary; it does not redo the integration node.
+集成 receipt 是下一裁决使用的 candidate receipt。Root 评估该 receipt 和可见边界，不重做集成节点。
 
-## 6. Admit Review Only When It Can Change The Verdict
+## 5. Admit Review Only When It Can Change The Verdict
 
-Apply the checker rule already resident in the global instruction kernel. If admitted, send one neutral coherent candidate: goal/contracts, exact final diff or artifact, existing evidence with independent-oracle provenance, residual gaps, and a findings-first report contract. Do not encode an expected verdict.
+套用 AGENTS 里的 `reviewer` 准入。获准后只送一个中立连贯 candidate：目标/合约、精确最终 diff 或 artifact、带独立 oracle 出处的既有证据、残余缺口、findings-first 报告合同。不要编码期望 verdict。
 
-Route accepted stable finding IDs back to the implementation-owner lineage with the governing anchor, decision-relevant evidence, task facts to preserve, proof state, and acceptance. Finding prose is not reader-facing replacement copy. For the immediate repair/recheck loop, use the collaboration policy and the extended packet reference below. Do not make root-side semantic repairs or create another full review.
+把已接受的稳定 finding ID 连同治理锚点、决策相关证据、须保留的任务事实、证明状态和验收，路由回实现 owner 谱系。Finding 正文不是面向读者的替换文案。立即 repair/recheck 循环走 AGENTS「协作边界」和下面的扩展 packet。不要在 root 侧做语义修复，也不要再开一轮全面 review。
 
-## 7. Route Only Extended Edge Packets
+## 6. Extended Edge Packets
 
-Read [`references/subtask-contract.md`](references/subtask-contract.md) only for:
+只在这些情况下读 [`references/subtask-contract.md`](references/subtask-contract.md)：
 
-- a `critic` frame-audit packet;
-- an expired runtime lease and same-role successor packet; or
-- a checker finding repair / focused recheck packet.
+- 过期 runtime lease 与同角色 successor packet；或
+- reviewer finding 修复 / 定向复检 packet。
 
-Read [`references/dispatch-examples.md`](references/dispatch-examples.md) when a multi-role DAG, shared-file integration, or tool-level wait/repair sequence remains unclear. These references are examples and packets, not governance authorities.
+多角色 DAG、共享文件集成或工具级等待/修复顺序仍不清楚时，读 [`references/dispatch-examples.md`](references/dispatch-examples.md)。这些是例子和 packet，不是治理权威。
 
-## 8. Finish From Receipts
+## 7. Finish From Receipts
 
-Before returning control to root, ensure every required node is terminal, shared ownership is closed, accepted findings are resolved or explicit, and the integration receipt satisfies the common AGENTS contract plus any integration-specific delta.
+把控制交回 root 前，确认每个必需节点已终止、共享 ownership 已关闭、已接受 finding 已解决或显式留下、集成 receipt 满足 AGENTS 合同及任何集成特定 delta。
 
-Do not commit, push, publish, install, or perform another external side effect unless the root brief explicitly grants that exact action.
+除非 root brief 明确授予该精确动作，否则不要 commit、push、publish、install 或做其他外部副作用。

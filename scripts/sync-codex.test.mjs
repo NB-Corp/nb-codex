@@ -209,36 +209,38 @@ test("repository manifest does not ship a specialist-dispatch tombstone", () => 
   assert.equal(manifest.homeTombstones.some((entry) => entry.home === "agents/trellis-specialist-dispatch.md"), false);
 });
 
-test("repository manifest ships seven coding roles, overwrites the neutral prompt, and leaves AGENTS.md advise-only", () => {
+test("repository manifest ships seven coding roles, overwrites the neutral prompt, and seeds AGENTS.md only when absent", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(systemRoot, "sync-manifest.json"), "utf8"));
   const roles = manifest.agentSets.flatMap((set) => set.roles.map((role) => role.name)).sort();
   assert.deepEqual(roles, [
-    "check",
-    "critic",
+    "executor",
     "explore",
+    "frontend",
     "implement",
     "research",
-    "think",
-    "worker_lite"
+    "reviewer",
+    "think"
   ]);
   const codingSet = manifest.agentSets.find((set) => set.id === "prompt-coding");
   assert.ok(codingSet);
   assert.equal(codingSet.ownership, "full-file");
   const flatCodingPaths = new Map([
-    ["check", "agents/check.toml"],
-    ["critic", "agents/critic.toml"],
+    ["executor", "agents/executor.toml"],
     ["explore", "agents/explore.toml"],
+    ["frontend", "agents/frontend.toml"],
     ["implement", "agents/implement.toml"],
     ["research", "agents/research.toml"],
-    ["think", "agents/think.toml"],
-    ["worker_lite", "agents/worker-lite.toml"]
+    ["reviewer", "agents/reviewer.toml"],
+    ["think", "agents/think.toml"]
   ]);
   for (const role of codingSet.roles) {
     assert.equal(role.repo, flatCodingPaths.get(role.name));
     assert.equal(role.repo, role.home);
     assert.equal(manifest.files.filter((entry) => entry.repo === role.repo && entry.home === role.home).length, 1);
   }
-  assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md"), false);
+  assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md" || entry.repo === "templates/AGENTS.md"), false);
+  assert.equal(manifest.files.some((entry) => entry.repo.startsWith("policies/")), false);
+  assert.equal(manifest.files.some((entry) => entry.repo.startsWith("skills/codex-agent-profile/")), false);
   assert.equal(manifest.files.some((entry) => entry.repo === "prompts/system-prompt-nia.md"), false);
   assert.equal(
     manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath,
@@ -251,8 +253,35 @@ test("repository manifest ships seven coding roles, overwrites the neutral promp
     (entry) => entry.path === "features.multi_agent_v2.multi_agent_mode_hint_text"
   ).value;
   assert.match(hint, /Follow the current global AGENTS\.md as the single authority/);
-  assert.match(hint, /Never use the built-in default, explorer, or worker as a fallback/);
+  assert.doesNotMatch(hint, /Never use the built-in default, explorer, or worker as a fallback/);
   assert.match(hint, /This mode remains active until a later multi-agent mode developer message changes it/);
+});
+
+test("model catalog lists grok-4.6 and deepseek-v4-flash at a 400k Codex cap", () => {
+  const catalog = JSON.parse(fs.readFileSync(path.join(systemRoot, "models.json"), "utf8"));
+  const bySlug = new Map(catalog.models.map((model) => [model.slug, model]));
+  const grok = bySlug.get("grok-4.6");
+  const flash = bySlug.get("deepseek-v4-flash");
+  assert.ok(grok, "missing grok-4.6");
+  assert.ok(flash, "missing deepseek-v4-flash");
+  for (const model of [grok, flash]) {
+    assert.equal(model.context_window, 400000, model.slug);
+    assert.equal(model.max_context_window, 400000, model.slug);
+    assert.doesNotMatch(model.base_instructions, /GPT-5/, model.slug);
+    assert.doesNotMatch(model.model_messages.instructions_template, /GPT-5/, model.slug);
+  }
+  assert.deepEqual(grok.input_modalities, ["text", "image"]);
+  assert.deepEqual(
+    grok.supported_reasoning_levels.map((level) => level.effort),
+    ["low", "medium", "high", "xhigh"]
+  );
+  assert.equal(grok.default_reasoning_level, "high");
+  assert.deepEqual(flash.input_modalities, ["text"]);
+  assert.deepEqual(
+    flash.supported_reasoning_levels.map((level) => level.effort),
+    ["low", "high", "max"]
+  );
+  assert.equal(flash.default_reasoning_level, "high");
 });
 
 test("repository manifest does not project a product-feedback skill", () => {
@@ -268,15 +297,15 @@ test("repository manifest does not project a product-feedback skill", () => {
   assert.equal(fs.existsSync(path.join(systemRoot, "prompts", "system-prompt-nia.md")), false);
 });
 
-test("canonical coding profiles use Assay Task context and reject retired ambient task discovery", () => {
+test("canonical coding profiles pin mixed-family models and reject retired ambient task discovery", () => {
   const expected = new Map([
-    ["check.toml", { name: "check", model: "gpt-5.6-sol", effort: "high" }],
-    ["critic.toml", { name: "critic", model: "gpt-5.6-sol", effort: "max", sandbox: "read-only" }],
+    ["executor.toml", { name: "executor", model: "grok-4.6", effort: "high" }],
     ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority", sandbox: "read-only" }],
+    ["frontend.toml", { name: "frontend", model: "grok-4.6", effort: "high" }],
     ["implement.toml", { name: "implement", model: "gpt-5.6-sol", effort: "high" }],
-    ["research.toml", { name: "research", model: "gpt-5.6-terra", effort: "xhigh" }],
-    ["think.toml", { name: "think", model: "gpt-5.6-sol", effort: "max" }],
-    ["worker-lite.toml", { name: "worker_lite", model: "gpt-5.6-luna", effort: "max", tier: "priority" }]
+    ["research.toml", { name: "research", model: "grok-4.6", effort: "xhigh" }],
+    ["reviewer.toml", { name: "reviewer", model: "gpt-5.6-sol", effort: "high", sandbox: "read-only" }],
+    ["think.toml", { name: "think", model: "gpt-5.6-sol", effort: "max" }]
   ]);
   function scalar(text, key) {
     const match = text.match(new RegExp(`^${key}\\s*=\\s*"([^"]+)"`, "m"));
@@ -290,13 +319,16 @@ test("canonical coding profiles use Assay Task context and reject retired ambien
     assert.equal(scalar(text, "service_tier"), settings.tier, file);
     assert.equal(scalar(text, "sandbox_mode"), settings.sandbox, file);
     assert.doesNotMatch(text, /\.trellis|task\.py|<trellis-subagent-context>|SubagentStart|Trellis task/i, file);
-  }
-  for (const file of [...expected.keys()].filter((name) => name !== "worker-lite.toml")) {
-    const text = fs.readFileSync(path.join(systemRoot, "agents", file), "utf8");
+    assert.doesNotMatch(text, /assay task context|Active task:/i, file);
+    assert.doesNotMatch(text, /\bcritic\b|science role/i, file);
     assert.match(text, /dispatch/is, file);
-    assert.match(text, /assay task context/is, file);
-    assert.match(text, /not permission or a host job/is, file);
+    assert.match(text, /only task-context envelope/is, file);
+    assert.match(text, /never treat a path as permission or a host job/is, file);
   }
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "critic.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "check.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker-lite.toml")), false);
 });
 
 test("a missing tombstone target is clean in status and push dry-run", (t) => {

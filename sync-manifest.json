@@ -1,7 +1,7 @@
 {
   "schema": 2,
   "name": "nb-codex-install",
-  "description": "One-time nb-codex install: overwrite the root prompt, write config.toml overlay values, and copy policies, coding agents, skills, and the model catalog. AGENTS.md is advise-only.",
+  "description": "One-time nb-codex install: overwrite the root prompt, write config.toml overlay values, and copy coding agents, the parallel-collab skill, and the model catalog. AGENTS.md is seeded only when absent.",
   "defaultHome": "~/.codex",
   "stateFile": ".nb-codex-sync-state.json",
   "modelCatalog": {
@@ -20,7 +20,7 @@
       { "path": "agents.max_concurrent_threads_per_session", "value": 15 },
       {
         "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
-        "value": "Proactive multi-agent delegation is active; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility and finite topology, and follow only its named edge-policy routes. Never use the built-in default, explorer, or worker as a fallback. This mode remains active until a later multi-agent mode developer message changes it."
+        "value": "Proactive multi-agent delegation is active; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. This mode remains active until a later multi-agent mode developer message changes it."
       }
     ],
     "featureValues": [
@@ -50,13 +50,13 @@
       "id": "prompt-coding",
       "ownership": "full-file",
       "roles": [
-        { "name": "check", "repo": "agents/check.toml", "home": "agents/check.toml" },
-        { "name": "critic", "repo": "agents/critic.toml", "home": "agents/critic.toml" },
+        { "name": "executor", "repo": "agents/executor.toml", "home": "agents/executor.toml" },
         { "name": "explore", "repo": "agents/explore.toml", "home": "agents/explore.toml" },
+        { "name": "frontend", "repo": "agents/frontend.toml", "home": "agents/frontend.toml" },
         { "name": "implement", "repo": "agents/implement.toml", "home": "agents/implement.toml" },
         { "name": "research", "repo": "agents/research.toml", "home": "agents/research.toml" },
-        { "name": "think", "repo": "agents/think.toml", "home": "agents/think.toml" },
-        { "name": "worker_lite", "repo": "agents/worker-lite.toml", "home": "agents/worker-lite.toml" }
+        { "name": "reviewer", "repo": "agents/reviewer.toml", "home": "agents/reviewer.toml" },
+        { "name": "think", "repo": "agents/think.toml", "home": "agents/think.toml" }
       ]
     }
   ],
@@ -69,19 +69,19 @@
       "description": "Pinned custom Codex model catalog"
     },
     {
-      "repo": "agents/check.toml",
-      "home": "agents/check.toml",
-      "description": "Canonical profile for check"
-    },
-    {
-      "repo": "agents/critic.toml",
-      "home": "agents/critic.toml",
-      "description": "Canonical profile for critic"
+      "repo": "agents/executor.toml",
+      "home": "agents/executor.toml",
+      "description": "Canonical profile for executor"
     },
     {
       "repo": "agents/explore.toml",
       "home": "agents/explore.toml",
       "description": "Canonical profile for explore"
+    },
+    {
+      "repo": "agents/frontend.toml",
+      "home": "agents/frontend.toml",
+      "description": "Canonical profile for frontend"
     },
     {
       "repo": "agents/implement.toml",
@@ -94,24 +94,14 @@
       "description": "Canonical profile for research"
     },
     {
+      "repo": "agents/reviewer.toml",
+      "home": "agents/reviewer.toml",
+      "description": "Canonical profile for reviewer"
+    },
+    {
       "repo": "agents/think.toml",
       "home": "agents/think.toml",
       "description": "Canonical profile for think"
-    },
-    {
-      "repo": "agents/worker-lite.toml",
-      "home": "agents/worker-lite.toml",
-      "description": "Canonical profile for worker_lite"
-    },
-    {
-      "repo": "policies/verification.md",
-      "home": "policies/verification.md",
-      "description": "High-risk action, disputed-evidence, contamination, and broad/release verification edge protocols"
-    },
-    {
-      "repo": "policies/collaboration.md",
-      "home": "policies/collaboration.md",
-      "description": "Collaboration critic, steering, takeover, successor, repair/recheck, and integration edge protocols"
     },
     {
       "repo": "prompts/subagent-model-instructions.md",
@@ -121,7 +111,7 @@
     {
       "repo": "prompts/system-prompt-neutral.md",
       "home": "prompts/system-prompt-neutral.md",
-      "description": "Root-thread Codex engineering prompt with the persona layer removed"
+      "description": "Root-thread Codex engineering prompt"
     },
     {
       "repo": "skills/codex-parallel-collab/SKILL.md",
@@ -136,7 +126,7 @@
     {
       "repo": "skills/codex-parallel-collab/references/subtask-contract.md",
       "home": "skills/codex-parallel-collab/references/subtask-contract.md",
-      "description": "Extended critic, successor, repair, recheck, and evidence packet reference"
+      "description": "Extended successor, repair, recheck, and evidence packet reference"
     },
     {
       "repo": "skills/codex-parallel-collab/references/dispatch-examples.md",
@@ -147,31 +137,6 @@
       "repo": "skills/codex-parallel-collab/agents/openai.yaml",
       "home": "skills/codex-parallel-collab/agents/openai.yaml",
       "description": "Codex skill metadata for role-aware parallel collaboration"
-    },
-    {
-      "repo": "skills/codex-agent-profile/SKILL.md",
-      "home": "skills/codex-agent-profile/SKILL.md",
-      "description": "Custom Codex agent TOML authoring workflow"
-    },
-    {
-      "repo": "skills/codex-agent-profile/agents/openai.yaml",
-      "home": "skills/codex-agent-profile/agents/openai.yaml",
-      "description": "Codex skill metadata for agent profile authoring"
-    },
-    {
-      "repo": "skills/codex-agent-profile/references/profile-design.md",
-      "home": "skills/codex-agent-profile/references/profile-design.md",
-      "description": "Layer ownership and role-design reference for custom agents"
-    },
-    {
-      "repo": "skills/codex-agent-profile/scripts/validate_agent_toml.py",
-      "home": "skills/codex-agent-profile/scripts/validate_agent_toml.py",
-      "description": "Read-only structural validator for custom-agent TOML files"
-    },
-    {
-      "repo": "skills/codex-agent-profile/scripts/test_validate_agent_toml.py",
-      "home": "skills/codex-agent-profile/scripts/test_validate_agent_toml.py",
-      "description": "Focused validator regression tests"
     }
   ],
   "homeTombstones": []

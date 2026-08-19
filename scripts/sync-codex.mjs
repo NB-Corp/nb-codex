@@ -1742,6 +1742,7 @@ async function runPortable(options) {
   if (options.portableCommand === "plan") {
     const plan = await createInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged });
     const pending = plan.files.filter((item) => item.state !== "matching").length +
+      (plan.seeds ?? []).filter((item) => item.state === "create").length +
       plan.links.filter((item) => item.state !== "matching").length +
       (plan.config.state === "matching" ? 0 : 1) + (plan.marker.state === "matching" ? 0 : 1);
     console.log(`portable plan: ${path.join(systemRoot, ".nb-codex", "install-plan.json")}`);

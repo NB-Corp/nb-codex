@@ -1,4 +1,0 @@
-interface:
-  display_name: "Codex Agent Profile"
-  short_description: "Design and validate custom Codex agent TOML profiles"
-  default_prompt: "Use $codex-agent-profile to design or audit this Codex subagent TOML from its role contract, then validate the exact file."

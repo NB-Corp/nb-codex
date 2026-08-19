@@ -1,25 +1,6 @@
 # Extended Collaboration Packets
 
-Ordinary node briefs and receipts are inlined by `SKILL.md`; do not load this file for routine dispatch. These packets apply only after the matching edge door in `policies/collaboration.md` is open.
-
-## Frame-Audit Packet
-
-Use only after the sparse-critic gate passes:
-
-```text
-Node: frame-audit-<decision-or-version>
-Decision boundary: <consequential commitment this audit may change>
-Exact user intent: <smallest relevant verbatim excerpts with provenance>
-Provisional parent frame: <objective, diagnosis, scope, direction, success criteria>
-Authoritative anchors: <primary files, contracts, observations, prior decisions>
-Tensions or missing facts: <material uncertainty, not a desired verdict>
-Read scope: <authorized evidence roots>
-Write scope: NONE
-Do not: <mutation, delegation, coordination, external contact, install, commit>
-Report: <verdict, evidence, strongest counterframe, implications, uncertainty>
-```
-
-Do not ask for disagreement or encode the conclusion. Keep direct user statements distinct from parent inference. A valid critic may conclude that the frame holds.
+Ordinary node briefs and receipts are inlined by `SKILL.md`; do not load this file for routine dispatch. These packets apply only after the matching edge door in `AGENTS.md` 「协作边界」 is open.
 
 ## Successor Packet
 
@@ -60,11 +41,11 @@ Repeat the packet fields per accepted finding. The finding prose is parent-inter
 
 ## Focused Recheck Packet
 
-Return the repair receipt to the checker lineage:
+Return the repair receipt to the reviewer lineage:
 
 ```text
 Candidate: <exact repaired diff or artifact>
-Original review reference: <checker-lineage evidence retained by path or message identity>
+Original review reference: <reviewer-lineage evidence retained by path or message identity>
 Finding IDs to recheck: <the same stable IDs only>
 Repair diff: <exact paths/changes>
 Evidence: <producer, inputs, independent oracle, outcome, claim limits>
@@ -73,7 +54,7 @@ Unchanged findings: <explicitly out of scope>
 Report: <closed/open per ID, new material regression only if directly caused>
 ```
 
-The recheck closes the named findings; it does not restart a full review or solicit a second opinion. Reuse a warm thread only for the immediate loop; otherwise use the successor packet with the same checker lineage.
+The recheck closes the named findings; it does not restart a full review or solicit a second opinion. Reuse a warm thread only for the immediate loop; otherwise use the successor packet with the same reviewer lineage.
 
 ## Evidence Receipt Fields
 

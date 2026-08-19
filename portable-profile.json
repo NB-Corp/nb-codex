@@ -11,5 +11,8 @@
     "promptAssignment": "model_instructions_file = \"~/.codex/",
     "expectedCountPerFile": 1
   },
+  "seedIfAbsent": [
+    { "repo": "templates/AGENTS.md", "home": "AGENTS.md" }
+  ],
   "externalComponents": {}
 }

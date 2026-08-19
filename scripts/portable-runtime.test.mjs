@@ -12,25 +12,73 @@ import { parseScalar } from "../src/toml-overlay.mjs";
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryRoots = [];
 
-test("nb-codex identity, prompt, and advise-only AGENTS contract", async () => {
+test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () => {
   const system = await readFile(path.join(projectRoot, "system.yaml"), "utf8");
   const packageManifest = JSON.parse(await readFile(path.join(projectRoot, "package.json"), "utf8"));
   const portableProfile = JSON.parse(await readFile(path.join(projectRoot, "portable-profile.json"), "utf8"));
   const manifest = JSON.parse(await readFile(path.join(projectRoot, "sync-manifest.json"), "utf8"));
   const prompt = await readFile(path.join(projectRoot, "prompts", "system-prompt-neutral.md"), "utf8");
-  const agents = await readFile(path.join(projectRoot, "AGENTS.md"), "utf8");
+  const agents = await readFile(path.join(projectRoot, "templates", "AGENTS.md"), "utf8");
+  await assert.rejects(lstat(path.join(projectRoot, "AGENTS.md")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "prompts", "src")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "scripts", "build-prompts.mjs")), { code: "ENOENT" });
 
   assert.match(system, /^\s*name: nb-codex\s*$/m);
   assert.equal(packageManifest.name, "nb-codex");
   assert.equal(portableProfile.id, "portable-core");
+  assert.deepEqual(portableProfile.seedIfAbsent, [{ repo: "templates/AGENTS.md", home: "AGENTS.md" }]);
   assert.deepEqual(portableProfile.externalComponents, {});
-  assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md"), false);
+  assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md" || entry.repo === "templates/AGENTS.md" || entry.home === "AGENTS.md"), false);
   assert.equal(manifest.files.some((entry) => entry.repo.includes("nia")), false);
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath, "prompts/system-prompt-neutral.md");
   assert.doesNotMatch(prompt, /\bNia\b|妮娅|本宝宝|杂鱼大叔/);
   assert.match(prompt, /Content And Tone Floor/);
-  assert.match(agents, /\{CODEX_HOME\}/);
-  assert.doesNotMatch(agents, /xxoy1|ProductStewardship|妮娅|本宝宝/);
+  assert.match(agents, /协作边界|验证边界/);
+  assert.doesNotMatch(agents, /\{CODEX_HOME\}|policies\/collaboration|Assay|brainstorm-to-decision|codex-agent-profile/);
+  assert.doesNotMatch(agents, /xxoy1|ProductStewardship|妮娅|本宝宝|nb-codex 提供|本模板|science_\*|critic frame audit|本包装/);
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "critic.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "policies", "collaboration.md")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "skills", "codex-agent-profile")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "check.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "worker.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "worker-lite.toml")), { code: "ENOENT" });
+
+  const genealogy = /妮娅|\bNia\b|\bnia\b|ProductStewardship|去掉.{0,20}人格|发布切片|科学角色|产品反馈投影|nia 工程|Assay Task/;
+  const recipientDocs = [
+    "README.md",
+    path.join("docs", "agents-merge.md"),
+    path.join("docs", "instruction-layers.md"),
+    path.join("templates", "AGENTS.md"),
+    path.join("prompts", "system-prompt-neutral.md"),
+    path.join("prompts", "subagent-model-instructions.md")
+  ];
+  for (const relative of recipientDocs) {
+    const text = await readFile(path.join(projectRoot, relative), "utf8");
+    assert.doesNotMatch(text, genealogy, relative);
+  }
+  const readme = await readFile(path.join(projectRoot, "README.md"), "utf8");
+  assert.doesNotMatch(readme, /critic\.toml|worker-lite|codex-agent-profile/);
+  const subagent = await readFile(path.join(projectRoot, "prompts", "subagent-model-instructions.md"), "utf8");
+  assert.doesNotMatch(subagent, /Assay|A `lite` name|Feature flags are defense in depth/);
+  assert.match(subagent, /built-in `default`, `explorer`, and `worker`/);
+
+  function developerInstructions(text, file) {
+    const match = text.match(/developer_instructions\s*=\s*"""\r?\n([\s\S]*?)\r?\n"""/);
+    assert.ok(match, `${file} missing developer_instructions`);
+    return match[1];
+  }
+  const leafRoles = ["executor.toml", "explore.toml", "research.toml", "reviewer.toml"];
+  const spawnCapableRoles = ["implement.toml", "frontend.toml", "think.toml"];
+  for (const file of leafRoles) {
+    const body = developerInstructions(await readFile(path.join(projectRoot, "agents", file), "utf8"), file);
+    assert.doesNotMatch(body, /built-in/, file);
+    assert.doesNotMatch(body, /You were chosen because|low-intelligence|search-layer|task-path/, file);
+  }
+  for (const file of spawnCapableRoles) {
+    const body = developerInstructions(await readFile(path.join(projectRoot, "agents", file), "utf8"), file);
+    assert.match(body, /built-in `default`|built-in `explorer`|built-in `worker`/, file);
+    assert.doesNotMatch(body, /reconstruct a generic built-in worker|low-intelligence/, file);
+  }
 });
 
 test.after(async () => {
@@ -126,6 +174,9 @@ test("portable init is explicit and plan leaves the selected home byte-for-byte 
   for (const key of ["options", "sources", "targets"]) assert.match(plan.fingerprints[key], /^[0-9a-f]{64}$/);
   assert.equal(plan.product, "nb-codex");
   assert.equal(plan.files.some((entry) => entry.relative === "AGENTS.md"), false);
+  assert.equal(plan.seeds.length, 1);
+  assert.equal(plan.seeds[0].relative, "AGENTS.md");
+  assert.equal(plan.seeds[0].state, "create");
   assert.ok(plan.config.target.endsWith(`${path.sep}config.toml`) || plan.config.target.endsWith("/config.toml"));
 });
 
@@ -147,7 +198,7 @@ test("managed TOML integers accept only separators between digits", async () => 
   assert.match(doctor.stderr, /invalid managed scalar model_auto_compact_token_limit|managed value is not a supported scalar/);
 });
 
-test("portable core overwrites the root prompt and config.toml but does not write AGENTS.md", async () => {
+test("portable core overwrites the root prompt and config.toml but does not replace an existing AGENTS.md", async () => {
   const item = await fixture("core");
   await mkdir(path.join(item.home, "agents"));
   await mkdir(path.join(item.home, "skills", "custom-skill"), { recursive: true });
@@ -180,23 +231,24 @@ test("portable core overwrites the root prompt and config.toml but does not writ
   await planApply(item);
   const ownershipMarker = JSON.parse(await readFile(path.join(item.home, ".nb-codex-managed.json"), "utf8"));
   assert.equal(ownershipMarker.product, "nb-codex");
-  assert.equal(ownershipMarker.managedFiles.length, 13);
+  assert.equal(ownershipMarker.managedFiles.length, 11);
   assert.equal(ownershipMarker.managedFiles.includes("AGENTS.md"), false);
   assert.equal(ownershipMarker.managedFiles.includes("config.toml"), true);
+  assert.equal(ownershipMarker.managedFiles.includes("agents/critic.toml"), false);
   assert.deepEqual(ownershipMarker.managedLinks.map((entry) => entry.relative).sort(), [
-    "skills/codex-agent-profile", "skills/codex-parallel-collab"
+    "skills/codex-parallel-collab"
   ]);
   const installed = await readFile(path.join(item.home, "config.toml"), "utf8");
   assert.ok(installed.includes(opaque), "independent byte oracle: every unrelated original config byte remains contiguous and unchanged");
   assert.match(installed, /model_instructions_file = ".*prompts\/system-prompt-neutral\.md"/);
   assert.equal(await readFile(path.join(item.home, "AGENTS.md"), "utf8"), "# user-owned agents file\n");
   assert.equal(await readFile(path.join(item.home, "agents", "custom.toml"), "utf8"), "name = \"custom\"\n");
-  for (const name of ["check", "critic", "explore", "implement", "research", "think", "worker-lite"]) {
+  for (const name of ["executor", "explore", "frontend", "implement", "research", "reviewer", "think"]) {
     const text = await readFile(path.join(item.home, "agents", `${name}.toml`), "utf8");
     assert.match(text, new RegExp(item.home.replaceAll("\\", "/").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
   for (const relative of [
-    "models.json", "policies/collaboration.md", "policies/verification.md",
+    "models.json",
     "prompts/subagent-model-instructions.md", "prompts/system-prompt-neutral.md"
   ]) {
     assert.deepEqual(
@@ -206,9 +258,9 @@ test("portable core overwrites the root prompt and config.toml but does not writ
     );
   }
   await missing(path.join(item.home, "prompts", "system-prompt-nia.md"));
-  for (const skill of ["codex-parallel-collab", "codex-agent-profile"]) {
-    assert.equal((await lstat(path.join(item.home, "skills", skill))).isSymbolicLink(), true);
-  }
+  await missing(path.join(item.home, "policies", "collaboration.md"));
+  await missing(path.join(item.home, "skills", "codex-agent-profile"));
+  assert.equal((await lstat(path.join(item.home, "skills", "codex-parallel-collab"))).isSymbolicLink(), true);
   assert.match(okay(run(item, ["portable", "doctor"]), "portable doctor"), /portable doctor: ok/);
   assert.match(okay(run(item, ["portable", "status"]), "portable status"), /portable status: ok/);
 });
@@ -217,6 +269,10 @@ test("legacy commands converge on portable ownership and refuse portable-home mu
   const item = await fixture("legacy-routing");
   await initialize(item);
   await planApply(item);
+  assert.equal(
+    await readFile(path.join(item.home, "AGENTS.md"), "utf8"),
+    await readFile(path.join(item.baseDir, "templates", "AGENTS.md"), "utf8")
+  );
   const before = await snapshotTree(item.home);
   const status = run(item, ["status", "--home", item.home]);
   assert.equal(status.status, 0, status.stderr);
@@ -293,7 +349,7 @@ test("repository move reports dangling links and the bounded repair sequence res
   assert.notEqual(diagnosed.status, 0);
   assert.match(diagnosed.stderr, /managed link is dangling/);
   const repaired = okay(run(item, ["portable", "repair-links"]), "portable repair-links");
-  assert.match(repaired, /removed 2 stale core links/);
+  assert.match(repaired, /removed 1 stale core links/);
   okay(run(item, ["portable", "plan"]), "post-move plan");
   okay(run(item, ["portable", "apply"]), "post-move apply");
   assert.match(okay(run(item, ["portable", "doctor"]), "post-move doctor"), /portable doctor: ok/);
@@ -358,7 +414,7 @@ test("doctor detects managed file, config, and link tamper", async () => {
   const linkCase = await fixture("doctor-link");
   await initialize(linkCase);
   await planApply(linkCase);
-  const link = path.join(linkCase.home, "skills", "codex-agent-profile");
+  const link = path.join(linkCase.home, "skills", "codex-parallel-collab");
   await rm(link, { force: true });
   const wrong = path.join(linkCase.root, "wrong skill");
   await mkdir(wrong);

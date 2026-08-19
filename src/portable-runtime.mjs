@@ -210,8 +210,17 @@ async function loadPortableProfile(baseDir) {
       if (entry.home !== entry.repo) fail(`canonical portable file mapping must preserve its relative path: ${entry.repo}`);
       return entry.repo;
     });
-  if (fileByRepo.has('AGENTS.md') || exactFiles.length !== 5 || agentFiles.length !== 7 || coreSkills.length !== 2) {
-    fail('canonical manifest must resolve to 5 exact files, 7 coding agents, and 2 core skills; AGENTS.md is advise-only');
+  const seedIfAbsent = Array.isArray(profile.seedIfAbsent) ? profile.seedIfAbsent : [];
+  if (seedIfAbsent.length !== 1) fail('portable profile must declare exactly one seed-if-absent file');
+  const seed = seedIfAbsent[0];
+  if (!seed || typeof seed !== 'object') fail('portable seed-if-absent entry is invalid');
+  const seedRepo = safeRelative(seed.repo, 'portable seed repo');
+  const seedHome = safeRelative(seed.home, 'portable seed home');
+  if (seedRepo !== 'templates/AGENTS.md' || seedHome !== 'AGENTS.md') {
+    fail('portable seed-if-absent must be templates/AGENTS.md → AGENTS.md');
+  }
+  if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 3 || agentFiles.length !== 7 || coreSkills.length !== 1) {
+    fail('canonical manifest must resolve to 3 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
   }
   if (!profile.externalComponents || typeof profile.externalComponents !== 'object') fail('portable profile externalComponents is invalid');
   for (const [name, component] of Object.entries(profile.externalComponents)) {
@@ -238,7 +247,7 @@ async function loadPortableProfile(baseDir) {
     }
   }
   return {
-    manifest: { ...profile, syncManifest: syncManifestRel, exactFiles, agentFiles, coreSkills, coreSkillFiles },
+    manifest: { ...profile, syncManifest: syncManifestRel, exactFiles, agentFiles, coreSkills, coreSkillFiles, seedIfAbsent: [{ repo: seedRepo, home: seedHome }] },
     bytes: await readFile(file),
     syncManifest,
     syncManifestBytes: await readFile(syncManifestPath),
@@ -418,8 +427,32 @@ async function desiredRuntimeFiles(baseDir, manifest, config) {
     text = text.replace(anchor, `model_instructions_file = "${portable(config.codexHome)}/`);
     files.push({ relative: `agents/${name}`, source, bytes: Buffer.from(text), transform: 'absolute-prompt-path' });
   }
-  if (files.length !== 12) fail(`portable profile materialized an unexpected file count: ${files.length}`);
+  if (files.length !== 10) fail(`portable profile materialized an unexpected file count: ${files.length}`);
   return files;
+}
+
+async function planSeedIfAbsent(baseDir, manifest, config) {
+  const spec = manifest.seedIfAbsent[0];
+  const source = path.join(baseDir, ...spec.repo.split('/'));
+  await assertOrdinaryExistingFile(source, `portable seed ${spec.repo}`);
+  const bytes = await readFile(source);
+  const target = path.join(config.codexHome, ...spec.home.split('/'));
+  const observed = await observeFile(target);
+  let state;
+  if (observed.type === 'absent') state = 'create';
+  else if (observed.type === 'file') state = 'keep-existing';
+  else fail(`seed target is not an ordinary file and cannot be replaced: ${target}`);
+  return {
+    relative: spec.home,
+    repo: spec.repo,
+    target,
+    source,
+    transform: 'seed-if-absent',
+    desiredSha256: sha256(bytes),
+    observed: state === 'create' ? observed : { type: 'file' },
+    state,
+    bytes,
+  };
 }
 
 async function observeFile(target) {
@@ -642,7 +675,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
       (inside(baseDir, config.productFeedbackDataRoot) || inside(config.productFeedbackDataRoot, baseDir))) {
     fail('product feedback data root and repository must be separate directory trees');
   }
-  for (const parent of ['agents', 'policies', 'prompts', 'skills']) {
+  for (const parent of ['agents', 'prompts', 'skills']) {
     const target = path.join(config.codexHome, parent);
     await assertSafeExistingAncestors(target, `managed parent ${parent}`);
     if (await exists(target)) {
@@ -656,6 +689,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
   const featureProbe = await probeFeatures(baseDir, config);
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
+  const seed = await planSeedIfAbsent(baseDir, manifest, config);
   const fileEntries = [];
   const replacements = [];
   for (const item of desired) {
@@ -689,6 +723,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     profileSha256: sha256(profileBytes),
     syncManifestSha256: sha256(syncManifestBytes),
     files: fileEntries.map((item) => ({ relative: item.relative, desiredSha256: item.desiredSha256, transform: item.transform })),
+    seed: { relative: seed.relative, repo: seed.repo, desiredSha256: seed.desiredSha256, transform: seed.transform },
     links: links.map((item) => ({ relative: item.relative, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, owner: item.owner, manifestFiles: item.expectedFiles ?? null })),
   };
   const desiredMarker = buildHomeMarker({ baseDir, config, manifest, sourceIdentity, fileEntries, links });
@@ -737,6 +772,16 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     featureProbe: { command: featureProbe.command, stdoutSha256: featureProbe.stdoutSha256, exposed: spec.exposed },
     feedbackDoctor,
     files: fileEntries,
+    seeds: [{
+      relative: seed.relative,
+      repo: seed.repo,
+      target: seed.target,
+      source: seed.source,
+      transform: seed.transform,
+      desiredSha256: seed.desiredSha256,
+      observed: seed.observed,
+      state: seed.state,
+    }],
     config: { target: configTarget, desiredSha256: configHash, observed: configObserved, state: configState },
     links: links.map((item) => ({ relative: item.relative, source: item.source, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, target: item.target, observed: item.observed, state: item.state })),
     marker: { relative: HOME_MARKER_FILE, target: markerTarget, desiredSha256: markerDesiredSha256, observed: markerObserved, state: markerState },
@@ -749,6 +794,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     enumerable: false,
   });
   Object.defineProperty(plan, '_desiredMarker', { value: desiredMarkerBytes, enumerable: false });
+  Object.defineProperty(plan, '_desiredSeedBytes', { value: Buffer.from(seed.bytes), enumerable: false });
   if (writePlan) {
     const receiptDir = path.join(baseDir, RECEIPT_ROOT);
     await mkdir(receiptDir, { recursive: true });
@@ -758,7 +804,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
 }
 
 async function createFixedParents(home, operations) {
-  const dirs = [home, ...['agents', 'policies', 'prompts', 'skills'].map((name) => path.join(home, name))];
+  const dirs = [home, ...['agents', 'prompts', 'skills'].map((name) => path.join(home, name))];
   for (const directory of dirs) {
     if (await exists(directory)) {
       const stat = await lstat(directory);
@@ -897,6 +943,17 @@ export async function applyInstallPlan({ baseDir, config, replaceManaged = false
       mutationCount += 1;
       await maybeInjectedFailure(mutationCount);
     }
+    for (const item of current.seeds ?? []) {
+      if (item.state === 'keep-existing') continue;
+      if (item.state !== 'create') fail(`unsupported seed state: ${item.state}`);
+      await recheckTarget(item, `seed file ${item.relative}`);
+      const sourceBytes = current._desiredSeedBytes;
+      if (!sourceBytes || sha256(sourceBytes) !== item.desiredSha256) fail(`reconstructed seed bytes do not match the approved plan: ${item.relative}`);
+      operations.push({ kind: 'created-file', relative: item.relative, target: item.target, createdSha256: item.desiredSha256 });
+      await writePlannedFile(item, sourceBytes);
+      mutationCount += 1;
+      await maybeInjectedFailure(mutationCount);
+    }
     if (current.config.state !== 'matching') {
       const configItem = { ...current.config, relative: 'config.toml' };
       await recheckTarget(configItem, 'managed config');
@@ -994,6 +1051,7 @@ export async function doctorRuntime({ baseDir, config }) {
   const featureProbe = await probeFeatures(baseDir, config);
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
+  const seed = await planSeedIfAbsent(baseDir, manifest, config);
   for (const item of desired) {
     const target = path.join(config.codexHome, ...item.relative.split('/'));
     const observed = await observeFile(target);
@@ -1015,6 +1073,7 @@ export async function doctorRuntime({ baseDir, config }) {
     profileSha256: sha256(profileBytes),
     syncManifestSha256: sha256(syncManifestBytes),
     files: fileEntries,
+    seed: { relative: seed.relative, repo: seed.repo, desiredSha256: seed.desiredSha256, transform: seed.transform },
     links: links.map((item) => ({ relative: item.relative, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, owner: item.owner, manifestFiles: item.expectedFiles ?? null })),
   };
   const desiredMarker = buildHomeMarker({ baseDir, config, manifest, sourceIdentity, fileEntries, links });
