@@ -1,0 +1,9 @@
+system:
+  project: Prompt
+  name: nb-codex
+  version: 0.1.0
+  status: active
+  vcs: independent-git
+  vcs_ref: main
+  supersedes: []
+contract_managed_by: assay

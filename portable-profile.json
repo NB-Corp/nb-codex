@@ -1,0 +1,15 @@
+{
+  "schemaVersion": 1,
+  "id": "portable-core",
+  "description": "One-time nb-codex Codex runtime install",
+  "canonicalSelection": {
+    "syncManifest": "sync-manifest.json",
+    "agentSet": "prompt-coding",
+    "skillRoot": "skills"
+  },
+  "agentsTransform": {
+    "promptAssignment": "model_instructions_file = \"~/.codex/",
+    "expectedCountPerFile": 1
+  },
+  "externalComponents": {}
+}

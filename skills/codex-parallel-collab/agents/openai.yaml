@@ -1,0 +1,4 @@
+interface:
+  display_name: "Codex Parallel Collaboration"
+  short_description: "Coordinate named Codex owners without shadow work"
+  default_prompt: "Use $codex-parallel-collab to choose an ownership shape, delegate to named roles, wait without shadow execution, and integrate verified receipts."

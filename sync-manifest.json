@@ -1,0 +1,178 @@
+{
+  "schema": 2,
+  "name": "nb-codex-install",
+  "description": "One-time nb-codex install: overwrite the root prompt, write config.toml overlay values, and copy policies, coding agents, skills, and the model catalog. AGENTS.md is advise-only.",
+  "defaultHome": "~/.codex",
+  "stateFile": ".nb-codex-sync-state.json",
+  "modelCatalog": {
+    "repo": "models.json",
+    "home": "models.json"
+  },
+  "configPatch": {
+    "home": "config.toml",
+    "values": [
+      { "path": "model", "value": "gpt-5.6-sol" },
+      { "path": "model_reasoning_effort", "value": "xhigh" },
+      { "path": "model_auto_compact_token_limit", "value": 345000 },
+      { "path": "model_catalog_json", "homePath": "models.json" },
+      { "path": "model_instructions_file", "homePath": "prompts/system-prompt-neutral.md" },
+      { "path": "service_tier", "value": "default" },
+      { "path": "agents.max_concurrent_threads_per_session", "value": 15 },
+      {
+        "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
+        "value": "Proactive multi-agent delegation is active; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility and finite topology, and follow only its named edge-policy routes. Never use the built-in default, explorer, or worker as a fallback. This mode remains active until a later multi-agent mode developer message changes it."
+      }
+    ],
+    "featureValues": [
+      {
+        "path": "suppress_unstable_features_warning",
+        "feature": "default_mode_request_user_input",
+        "value": true
+      },
+      {
+        "path": "features.default_mode_request_user_input",
+        "feature": "default_mode_request_user_input",
+        "value": true
+      }
+    ],
+    "absent": [
+      "model_context_window",
+      "model_supports_reasoning_summaries",
+      "model_reasoning_summary",
+      "stream_idle_timeout_ms",
+      "default_mode_request_user_input",
+      "features.js_repl"
+    ],
+    "legacyAgentTables": []
+  },
+  "agentSets": [
+    {
+      "id": "prompt-coding",
+      "ownership": "full-file",
+      "roles": [
+        { "name": "check", "repo": "agents/check.toml", "home": "agents/check.toml" },
+        { "name": "critic", "repo": "agents/critic.toml", "home": "agents/critic.toml" },
+        { "name": "explore", "repo": "agents/explore.toml", "home": "agents/explore.toml" },
+        { "name": "implement", "repo": "agents/implement.toml", "home": "agents/implement.toml" },
+        { "name": "research", "repo": "agents/research.toml", "home": "agents/research.toml" },
+        { "name": "think", "repo": "agents/think.toml", "home": "agents/think.toml" },
+        { "name": "worker_lite", "repo": "agents/worker-lite.toml", "home": "agents/worker-lite.toml" }
+      ]
+    }
+  ],
+  "externalSkills": [],
+  "files": [
+    {
+      "repo": "models.json",
+      "home": "models.json",
+      "diffMode": "summary",
+      "description": "Pinned custom Codex model catalog"
+    },
+    {
+      "repo": "agents/check.toml",
+      "home": "agents/check.toml",
+      "description": "Canonical profile for check"
+    },
+    {
+      "repo": "agents/critic.toml",
+      "home": "agents/critic.toml",
+      "description": "Canonical profile for critic"
+    },
+    {
+      "repo": "agents/explore.toml",
+      "home": "agents/explore.toml",
+      "description": "Canonical profile for explore"
+    },
+    {
+      "repo": "agents/implement.toml",
+      "home": "agents/implement.toml",
+      "description": "Canonical profile for implement"
+    },
+    {
+      "repo": "agents/research.toml",
+      "home": "agents/research.toml",
+      "description": "Canonical profile for research"
+    },
+    {
+      "repo": "agents/think.toml",
+      "home": "agents/think.toml",
+      "description": "Canonical profile for think"
+    },
+    {
+      "repo": "agents/worker-lite.toml",
+      "home": "agents/worker-lite.toml",
+      "description": "Canonical profile for worker_lite"
+    },
+    {
+      "repo": "policies/verification.md",
+      "home": "policies/verification.md",
+      "description": "High-risk action, disputed-evidence, contamination, and broad/release verification edge protocols"
+    },
+    {
+      "repo": "policies/collaboration.md",
+      "home": "policies/collaboration.md",
+      "description": "Collaboration critic, steering, takeover, successor, repair/recheck, and integration edge protocols"
+    },
+    {
+      "repo": "prompts/subagent-model-instructions.md",
+      "home": "prompts/subagent-model-instructions.md",
+      "description": "Common baseline prompt for Codex subagents"
+    },
+    {
+      "repo": "prompts/system-prompt-neutral.md",
+      "home": "prompts/system-prompt-neutral.md",
+      "description": "Root-thread Codex engineering prompt with the persona layer removed"
+    },
+    {
+      "repo": "skills/codex-parallel-collab/SKILL.md",
+      "home": "skills/codex-parallel-collab/SKILL.md",
+      "description": "Canonical role-aware parallel collaboration skill"
+    },
+    {
+      "repo": "skills/codex-parallel-collab/LICENSE",
+      "home": "skills/codex-parallel-collab/LICENSE",
+      "description": "License for the canonical parallel collaboration skill"
+    },
+    {
+      "repo": "skills/codex-parallel-collab/references/subtask-contract.md",
+      "home": "skills/codex-parallel-collab/references/subtask-contract.md",
+      "description": "Extended critic, successor, repair, recheck, and evidence packet reference"
+    },
+    {
+      "repo": "skills/codex-parallel-collab/references/dispatch-examples.md",
+      "home": "skills/codex-parallel-collab/references/dispatch-examples.md",
+      "description": "Role-aware collaboration dispatch examples"
+    },
+    {
+      "repo": "skills/codex-parallel-collab/agents/openai.yaml",
+      "home": "skills/codex-parallel-collab/agents/openai.yaml",
+      "description": "Codex skill metadata for role-aware parallel collaboration"
+    },
+    {
+      "repo": "skills/codex-agent-profile/SKILL.md",
+      "home": "skills/codex-agent-profile/SKILL.md",
+      "description": "Custom Codex agent TOML authoring workflow"
+    },
+    {
+      "repo": "skills/codex-agent-profile/agents/openai.yaml",
+      "home": "skills/codex-agent-profile/agents/openai.yaml",
+      "description": "Codex skill metadata for agent profile authoring"
+    },
+    {
+      "repo": "skills/codex-agent-profile/references/profile-design.md",
+      "home": "skills/codex-agent-profile/references/profile-design.md",
+      "description": "Layer ownership and role-design reference for custom agents"
+    },
+    {
+      "repo": "skills/codex-agent-profile/scripts/validate_agent_toml.py",
+      "home": "skills/codex-agent-profile/scripts/validate_agent_toml.py",
+      "description": "Read-only structural validator for custom-agent TOML files"
+    },
+    {
+      "repo": "skills/codex-agent-profile/scripts/test_validate_agent_toml.py",
+      "home": "skills/codex-agent-profile/scripts/test_validate_agent_toml.py",
+      "description": "Focused validator regression tests"
+    }
+  ],
+  "homeTombstones": []
+}

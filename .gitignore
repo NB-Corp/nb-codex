@@ -1,0 +1,4 @@
+__pycache__/
+*.py[cod]
+.nb-codex.local.json
+.nb-codex/
