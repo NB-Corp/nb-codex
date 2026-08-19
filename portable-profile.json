@@ -13,6 +13,5 @@
   },
   "seedIfAbsent": [
     { "repo": "templates/AGENTS.md", "home": "AGENTS.md" }
-  ],
-  "externalComponents": {}
+  ]
 }

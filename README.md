@@ -1,6 +1,6 @@
 # nb-codex
 
-一次性 Codex 安装包。协助配置的 AI 在新电脑上把本包装进用户选定的 `CODEX_HOME`：直接覆盖根 system prompt、写入 `config.toml` 托管键、安装角色 / 协作 skill / 模型目录。全局 `AGENTS.md` 仅在目标不存在时写入，已有文件不覆盖。
+一次性 Codex 安装包。协助配置的 AI 在新电脑上把本包装进用户选定的 `CODEX_HOME`：直接覆盖根 system prompt、写入 `config.toml` 托管键、安装角色 / 协作 skill / 模型目录。全局 `AGENTS.md`：没有则安装器写入模板；已有则以本包模板为骨架并入用户条款，主要冲突先问用户。
 
 本包写入：根提示词、七个编码角色、`codex-parallel-collab`、`models.json`、以及 `config.toml` 托管键。不写 provider 密钥。
 
@@ -11,13 +11,14 @@
 1. 让用户选定一个绝对路径作为 `CODEX_HOME`。已有 Codex 登录态可以沿用该 home；全新机器可以新建空目录。
 2. 覆盖根提示词：本包 `prompts/system-prompt-neutral.md` → `$CODEX_HOME/prompts/system-prompt-neutral.md`。按字节安装这份工程底线；不要换成另一份更软或更短的 system prompt。
 3. 必须配置 `config.toml`：用本包 `sync-manifest.json` 的 overlay 写入托管键，尤其是 `model_instructions_file` 指向刚装上的 `prompts/system-prompt-neutral.md`。未托管的键（provider、sandbox、MCP、hooks 等）原样保留。
-4. 安装七个编码角色、`codex-parallel-collab` skill 链接、以及 `models.json`。catalog 含 `gpt-5.6-sol` / `terra` / `luna`，以及 `grok-4.6` 与 `deepseek-v4-flash`（本包把这两条的 Codex 窗口钉在 400k）。角色 pin：`explore` 钉 `gpt-5.6-luna` + `max` + `service_tier = "priority"`；`implement` / `reviewer` / `think` 钉 `gpt-5.6-sol`；`executor` / `research` / `frontend` 钉 `grok-4.6`。`executor` 是纯 leaf，不要把内置 `worker` 当 fallback。`grok-4.6` / `deepseek-v4-flash` 要在用户 `config.toml` 里自备 `model_providers` 才能打通，本包不代写 provider 密钥。若目标 home 里已经存在本包不写入的旧角色或 `policies/` 文件，对照 [`docs/agents-merge.md`](docs/agents-merge.md) 的升级节处理；全新 home 跳过。
-5. 全局 `AGENTS.md`：目标不存在则写入 [`templates/AGENTS.md`](templates/AGENTS.md)；已有则不覆盖。已有文件缺本包内核时，对照模板与 [`docs/agents-merge.md`](docs/agents-merge.md) 给具体补丁。`templates/AGENTS.md` 是给用户全局文件用的正文，不是本仓库自己的治理文件。
+4. 安装七个编码角色、`codex-parallel-collab` skill 链接、以及 `models.json`。catalog 含 `gpt-5.6-sol` / `terra` / `luna`，以及 `grok-4.6` 与 `deepseek-v4-flash`。本包把 Codex 窗口钉在：sol 300k，terra / luna 500k，grok / flash 400k。角色 pin：`explore` 钉 `gpt-5.6-luna` + `max` + `service_tier = "priority"`；`implement` / `reviewer` / `think` 钉 `gpt-5.6-sol`；`executor` / `research` / `frontend` 钉 `grok-4.6`。`executor` 是纯 leaf，不要把内置 `worker` 当 fallback。`grok-4.6` / `deepseek-v4-flash` 要在用户 `config.toml` 里自备 `model_providers` 才能打通，本包不代写 provider 密钥。若目标 home 里已经存在本包不写入的旧角色或 `policies/` 文件，对照 [`docs/agents-merge.md`](docs/agents-merge.md) 的升级节处理；全新 home 跳过。
+5. 全局 `AGENTS.md`：安装器只在目标不存在时写入 [`templates/AGENTS.md`](templates/AGENTS.md)，已有文件不覆盖。apply 之前不要给空 home 预写这份文件，否则安装器会 keep-existing、模板种不进去。仅当 apply **之前** 目标已有该文件时，以模板为骨架把用户条款搬进对应节；会改变 root 决策的主要冲突先列给用户裁决，得到回答前不要写、不要猜。做法见 [`docs/agents-merge.md`](docs/agents-merge.md)。
 
 机械步骤：
 
 ```powershell
-$env:CODEX_HOME = Join-Path $HOME ".codex"
+# 用步骤 1 用户给出的绝对路径，不要默认 ~/.codex
+$env:CODEX_HOME = "<用户选定的绝对路径>"
 
 node scripts/sync-codex.mjs portable init --home $env:CODEX_HOME
 node scripts/sync-codex.mjs portable plan
@@ -25,11 +26,11 @@ node scripts/sync-codex.mjs portable apply
 node scripts/sync-codex.mjs portable doctor
 ```
 
-先看 plan 的 fingerprint 和变更数，再 apply。目标已有托管文件且内容不同时，整次 plan 拒绝；确认替换后两边都加 `--replace-managed`。
+先看 plan 的 fingerprint 和变更数，再 apply。目标已有托管文件且内容不同时，整次 plan 拒绝；确认替换后两边都加 `--replace-managed`。plan 会打印 `AGENTS.md: create` 或 `keep-existing`；变更数不含已有 `AGENTS.md`。若 apply 前该文件已存在，机械安装结束后还要按 [`docs/agents-merge.md`](docs/agents-merge.md) 合并。
 
-Apply 只接受当前 `portable plan` 和相同的 `--replace-managed` 选择。被替换的字节留在仓库 `.nb-codex/backups/<invocation>/`。失败时回滚本次写入，并尽量恢复仍匹配本次写入的旧字节。
+Apply 只接受当前 `portable plan` 和相同的 `--replace-managed` 选择。被替换的字节留在仓库 `.nb-codex/backups/<invocation>/`。失败时回滚本次写入，并尽量恢复仍匹配本次写入的旧字节。`portable init` 绑定 home；`plan` / `apply` 用这次记录，不回退 `~/.codex`。
 
-装完后新开一个 Codex 会话，让 catalog、config 和自定义角色一起加载。已有 AGENTS 的补丁建议交给用户改自己的文件。
+装完后新开一个 Codex 会话，让 catalog、config 和自定义角色一起加载。仅当 apply **之前** 目标已有 `AGENTS.md` 时按 [`docs/agents-merge.md`](docs/agents-merge.md) 以模板为骨架合并；未决的主要冲突不要落盘。
 
 ## 安装器覆盖什么
 
@@ -41,7 +42,7 @@ Apply 只接受当前 `portable plan` 和相同的 `--replace-managed` 选择。
 | `models.json` | `$CODEX_HOME/models.json` | 覆盖 |
 | `skills/codex-parallel-collab/` | 同名 skill 链接 | 链接到本包 |
 | `config.toml` overlay | `$CODEX_HOME/config.toml` | 必须写入托管键 |
-| `templates/AGENTS.md` | `$CODEX_HOME/AGENTS.md` | 仅当目标不存在时写入 |
+| `templates/AGENTS.md` | `$CODEX_HOME/AGENTS.md` | 安装器仅当目标不存在时写入；已有文件由协助 AI 按 [`docs/agents-merge.md`](docs/agents-merge.md) 合并 |
 
 根提示词直接改 `prompts/system-prompt-neutral.md`。
 

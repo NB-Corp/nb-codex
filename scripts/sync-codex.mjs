@@ -21,7 +21,6 @@ import {
   parseScalar as parseManagedScalar,
   scanToml
 } from "../src/toml-overlay.mjs";
-import { createDirectoryLinkSync } from "../src/runtime-fs.mjs";
 
 const scriptDir = path.dirname(fileURLToPath(import.meta.url));
 const systemRoot = path.resolve(scriptDir, "..");
@@ -49,7 +48,7 @@ Commands:
 Options:
   --dry-run    Print intended writes without changing files.
   --force      Allow overwriting reviewed drift or conflicts.
-  --home PATH  Override CODEX_HOME / ~/.codex.
+  --home PATH  Codex home. portable init requires --home or CODEX_HOME; it never defaults to ~/.codex.
   --replace-managed  Authorize replacement of managed drift in both portable plan and apply.
 `;
 
@@ -186,7 +185,6 @@ function loadManifest() {
 function validateManifestExtensions(manifest, repoPaths, homePaths, tombstonePaths) {
   if (manifest.schema === 1) {
     manifest.agentSets = [];
-    manifest.externalSkills = [];
     return;
   }
   const patch = manifest.configPatch;
@@ -246,31 +244,17 @@ function validateManifestExtensions(manifest, repoPaths, homePaths, tombstonePat
       fail(`invalid or duplicate agent set id: ${set && set.id}`);
     }
     setIds.add(set.id);
-    if (!["full-file", "external-junction", "inventory-only"].includes(set.ownership)) {
+    if (set.ownership !== "full-file") {
       fail(`unsupported agent set ownership: ${set.ownership}`);
     }
-    if (["external-junction", "inventory-only"].includes(set.ownership) && !set.runtimeRoot) {
-      fail(`${set.ownership} set needs runtimeRoot: ${set.id}`);
-    }
-    if (set.ownership === "external-junction" && !set.sourceRoot) {
-      fail(`external-junction set needs sourceRoot: ${set.id}`);
-    }
-    if (set.hostProjectionOwner !== undefined && set.hostProjectionOwner !== "prompt") {
-      fail(`unsupported host projection owner: ${set.id}`);
-    }
-    for (const envName of [set.sourceRootEnv, set.sharedFile && set.sharedFile.sourceEnv]) {
-      if (envName !== undefined && (typeof envName !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(envName))) {
-        fail(`invalid external source environment override: ${set.id}`);
+    for (const field of ["runtimeRoot", "sourceRoot", "sourceRootEnv", "sharedFile", "hostProjectionOwner"]) {
+      if (set[field] !== undefined) {
+        fail(`full-file agent set must not declare ${field}: ${set.id}`);
       }
-    }
-    if (set.sharedFile) {
-      if (!set.sharedFile.source || !set.sharedFile.home) fail(`sharedFile needs source/home: ${set.id}`);
-      assertRelativeSafe(set.sharedFile.home, `agent set ${set.id} sharedFile home`);
     }
     if (!Array.isArray(set.roles) || set.roles.length === 0) {
       fail(`agent set must list roles: ${set.id}`);
     }
-    if (set.runtimeRoot) assertRelativeSafe(set.runtimeRoot, `agent set ${set.id} runtimeRoot`);
     for (const role of set.roles) {
       if (!role || !isRoleName(role.name)) fail(`invalid agent role in set ${set.id}`);
       if (roleNames.has(role.name)) fail(`duplicate role ownership: ${role.name}`);
@@ -278,14 +262,10 @@ function validateManifestExtensions(manifest, repoPaths, homePaths, tombstonePat
       const runtimeRel = agentRuntimeRel(set, role);
       assertRelativeSafe(runtimeRel, `agent role ${role.name}`);
       addUniquePath(runtimePaths, runtimeRel, "duplicate runtime agent ownership");
-      if (set.ownership === "full-file") {
-        if (!role.repo || !role.home) fail(`full-file agent needs repo/home: ${role.name}`);
-        assertRelativeSafe(role.repo, `agent role ${role.name} repo`);
-        if (!repoPaths.has(normalizedPathKey(role.repo)) || !homePaths.has(normalizedPathKey(role.home))) {
-          fail(`full-file agent must reference a managed mapping: ${role.name}`);
-        }
-      } else if (!role.file) {
-        fail(`${set.ownership} agent needs file: ${role.name}`);
+      if (!role.repo || !role.home) fail(`full-file agent needs repo/home: ${role.name}`);
+      assertRelativeSafe(role.repo, `agent role ${role.name} repo`);
+      if (!repoPaths.has(normalizedPathKey(role.repo)) || !homePaths.has(normalizedPathKey(role.home))) {
+        fail(`full-file agent must reference a managed mapping: ${role.name}`);
       }
     }
   }
@@ -297,47 +277,8 @@ function validateManifestExtensions(manifest, repoPaths, homePaths, tombstonePat
     }
   }
 
-  if (manifest.externalSkills === undefined) manifest.externalSkills = [];
-  if (!Array.isArray(manifest.externalSkills)) fail("schema 2 manifest externalSkills must be an array");
-  const skillNames = new Set();
-  const skillRuntimePaths = new Set();
-  for (const skill of manifest.externalSkills) {
-    if (!skill || !isSkillName(skill.name) || skillNames.has(skill.name)) {
-      fail(`invalid or duplicate external skill name: ${skill && skill.name}`);
-    }
-    skillNames.add(skill.name);
-    if (skill.ownership !== "external-junction") {
-      fail(`unsupported external skill ownership: ${skill.name}`);
-    }
-    if (skill.hostProjectionOwner !== "prompt") {
-      fail(`external skill host projection owner must be prompt: ${skill.name}`);
-    }
-    if (!skill.sourceRoot || !path.isAbsolute(skill.sourceRoot)) {
-      fail(`external skill sourceRoot must be absolute: ${skill.name}`);
-    }
-    if (!skill.runtimePath) fail(`external skill needs runtimePath: ${skill.name}`);
-    assertRelativeSafe(skill.runtimePath, `external skill ${skill.name} runtimePath`);
-    const runtimeParts = path.normalize(skill.runtimePath).split(path.sep);
-    if (runtimeParts.length !== 2 || runtimeParts[0].toLowerCase() !== "skills" || runtimeParts[1] !== skill.name) {
-      fail(`external skill runtimePath must be skills/<name>: ${skill.name}`);
-    }
-    addUniquePath(skillRuntimePaths, skill.runtimePath, "duplicate external skill runtime path");
-    const runtimeKey = normalizedPathKey(skill.runtimePath);
-    if ([...homePaths, ...tombstonePaths].some((ownedKey) => pathKeysOverlap(runtimeKey, ownedKey))) {
-      fail(`external skill runtimePath overlaps a managed home path: ${skill.runtimePath}`);
-    }
-    for (const set of manifest.agentSets) {
-      if (set.runtimeRoot && pathKeysOverlap(runtimeKey, normalizedPathKey(set.runtimeRoot))) {
-        fail(`external skill runtimePath overlaps an agent runtime root: ${skill.runtimePath}`);
-      }
-    }
-    if (skill.sourceRootEnv !== undefined &&
-        (typeof skill.sourceRootEnv !== "string" || !/^[A-Z][A-Z0-9_]*$/.test(skill.sourceRootEnv))) {
-      fail(`invalid external skill source environment override: ${skill.name}`);
-    }
-    if (!skill.dataRoot || !path.isAbsolute(skill.dataRoot)) {
-      fail(`external skill dataRoot must be an explicit absolute path: ${skill.name}`);
-    }
+  if (Object.hasOwn(manifest, "externalSkills")) {
+    fail("schema 2 must not declare externalSkills");
   }
 }
 
@@ -355,28 +296,13 @@ function isRoleName(value) {
   return typeof value === "string" && /^[a-z][a-z0-9_]*$/.test(value);
 }
 
-function isSkillName(value) {
-  return typeof value === "string" && /^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(value);
-}
-
 function agentRuntimeRel(set, role) {
   if (role.home) return role.home;
-  if (set.runtimeRoot && role.file) return path.join(set.runtimeRoot, role.file);
-  fail(`agent role needs home or runtimeRoot/file: ${role && role.name}`);
-}
-
-function resolveExternalPath(defaultPath, envName) {
-  const override = envName ? process.env[envName] : null;
-  if (override && !path.isAbsolute(override)) fail(`${envName} must be an absolute path`);
-  return path.resolve(override || defaultPath);
+  fail(`full-file agent role needs home: ${role && role.name}`);
 }
 
 function normalizedPathKey(rel) {
   return path.normalize(rel).toLowerCase();
-}
-
-function pathKeysOverlap(left, right) {
-  return left === right || left.startsWith(`${right}${path.sep}`) || right.startsWith(`${left}${path.sep}`);
 }
 
 function addUniquePath(paths, rel, message) {
@@ -531,23 +457,6 @@ function assertSafeHomeRoot(homeRoot) {
   }
 }
 
-function safeDirectoryInfo(directoryPath, root) {
-  const rel = path.relative(root, directoryPath);
-  let current = root;
-  for (const part of rel.split(path.sep).filter(Boolean)) {
-    current = path.join(current, part);
-    try {
-      const stat = fs.lstatSync(current);
-      if (stat.isSymbolicLink()) return { safe: false, reason: "directory-reparse" };
-      if (!stat.isDirectory()) return { safe: false, reason: "not-directory" };
-    } catch (error) {
-      if (error && error.code === "ENOENT") return { safe: true };
-      throw error;
-    }
-  }
-  return { safe: true };
-}
-
 function discoverFeatures() {
   if (process.env.CODEX_SYNC_TEST_MODE === "1" && process.env.CODEX_SYNC_FEATURES !== undefined) {
     return {
@@ -695,15 +604,11 @@ function inspectAgentInventory(manifest, homeRoot) {
   }
 
   for (const set of manifest.agentSets || []) {
-    if (set.ownership === "external-junction") {
-      inspectJunctionSet(set, homeRoot, records, observedNames);
-    } else {
-      inspectSimpleSet(set, homeRoot, records, observedNames);
-    }
+    inspectSimpleSet(set, homeRoot, records, observedNames);
   }
 
   const agentsRoot = path.resolve(homeRoot, "agents");
-  for (const rel of inventoryTomlPaths(agentsRoot, manifest.agentSets || [])) {
+  for (const rel of inventoryTomlPaths(agentsRoot)) {
     const key = normalizedPathKey(rel);
     if (claimed.has(key)) continue;
     const profilePath = path.resolve(homeRoot, rel);
@@ -719,133 +624,6 @@ function inspectAgentInventory(manifest, homeRoot) {
   return { records, hasProblem: records.some((record) => record.problem) };
 }
 
-function readExternalSkillName(skillRoot) {
-  const skillFile = path.join(skillRoot, "SKILL.md");
-  let stat;
-  try {
-    stat = fs.lstatSync(skillFile);
-  } catch (error) {
-    return { error: error && error.code === "ENOENT" ? "SKILL.md missing" : "SKILL.md unreadable" };
-  }
-  if (!stat.isFile() || stat.isSymbolicLink()) return { error: "SKILL.md is not an ordinary file" };
-  let text;
-  try {
-    text = fs.readFileSync(skillFile, "utf8");
-  } catch {
-    return { error: "SKILL.md unreadable" };
-  }
-  const frontmatter = text.match(/^---\r?\n([\s\S]*?)\r?\n---(?:\r?\n|$)/);
-  if (!frontmatter) return { error: "SKILL.md frontmatter missing" };
-  const names = [...frontmatter[1].matchAll(/^name:\s*([a-z0-9]+(?:-[a-z0-9]+)*)\s*$/gm)];
-  if (names.length !== 1) return { error: "SKILL.md needs exactly one safe name" };
-  return { name: names[0][1] };
-}
-
-function safeAbsoluteDirectoryInfo(directoryPath) {
-  const resolved = path.resolve(directoryPath);
-  const parsed = path.parse(resolved);
-  let current = parsed.root;
-  const parts = path.relative(parsed.root, resolved).split(path.sep).filter(Boolean);
-  const candidates = [current];
-  for (const part of parts) {
-    current = path.join(current, part);
-    candidates.push(current);
-  }
-  for (const candidate of candidates) {
-    try {
-      const stat = fs.lstatSync(candidate);
-      if (stat.isSymbolicLink()) {
-        return {
-          safe: false,
-          reason: samePath(candidate, resolved) ? "directory-reparse" : "ancestor-reparse",
-          at: candidate
-        };
-      }
-      if (!stat.isDirectory()) {
-        return {
-          safe: false,
-          reason: samePath(candidate, resolved) ? "not-directory" : "ancestor-not-directory",
-          at: candidate
-        };
-      }
-    } catch (error) {
-      return {
-        safe: false,
-        reason: error && error.code === "ENOENT" ? "path-missing" : "path-unreadable",
-        at: candidate
-      };
-    }
-  }
-  return { safe: true, resolved };
-}
-
-function inspectExternalSkillSource(skill) {
-  const sourceRoot = resolveExternalPath(skill.sourceRoot, skill.sourceRootEnv);
-  const safety = safeAbsoluteDirectoryInfo(sourceRoot);
-  if (!safety.safe) {
-    const reason = safety.reason === "path-missing" ? "source-missing" : `source-unsafe-path:${safety.reason}`;
-    return { okay: false, sourceRoot, reason };
-  }
-  const summary = readExternalSkillName(sourceRoot);
-  if (summary.error) return { okay: false, sourceRoot, reason: summary.error };
-  if (summary.name !== skill.name) {
-    return { okay: false, sourceRoot, reason: `skill-name-mismatch:${summary.name}` };
-  }
-  return { okay: true, sourceRoot };
-}
-
-function inspectExternalSkillDataRoot(skill) {
-  const dataRoot = path.resolve(skill.dataRoot);
-  const safety = safeAbsoluteDirectoryInfo(dataRoot);
-  if (!safety.safe) {
-    const reason = safety.reason === "path-missing" ? "data-root-missing" : `data-root-unsafe-path:${safety.reason}`;
-    return { okay: false, dataRoot, reason };
-  }
-  return { okay: true, dataRoot };
-}
-
-function classifyHostProjection(targetPath, sourceRoot, homeRoot) {
-  const parentSafety = safeDirectoryInfo(path.dirname(targetPath), homeRoot);
-  if (!parentSafety.safe) return { status: "unsafe", reason: parentSafety.reason };
-  try {
-    const stat = fs.lstatSync(targetPath);
-    if (!stat.isSymbolicLink()) return { status: "occupied" };
-    let resolved;
-    try { resolved = fs.realpathSync(targetPath); } catch { resolved = null; }
-    return resolved && samePath(resolved, sourceRoot) ? { status: "clean" } : { status: "wrong" };
-  } catch (error) {
-    if (error && error.code === "ENOENT") return { status: "missing" };
-    return { status: "unsafe", reason: "target-unreadable" };
-  }
-}
-
-function inspectExternalSkills(manifest, homeRoot) {
-  const records = [];
-  for (const skill of manifest.externalSkills || []) {
-    const source = inspectExternalSkillSource(skill);
-    records.push({
-      status: source.okay ? "external-skill-source-ok" : "external-skill-source-invalid",
-      subject: `${skill.name}:${source.sourceRoot}${source.okay ? "" : ` (${source.reason})`}`,
-      problem: !source.okay
-    });
-    const data = inspectExternalSkillDataRoot(skill);
-    records.push({
-      status: data.okay ? "external-skill-data-root-ok" : "external-skill-data-root-invalid",
-      subject: `${skill.name}:${data.dataRoot}${data.okay ? "" : ` (${data.reason})`}`,
-      problem: !data.okay
-    });
-    const targetPath = path.resolve(homeRoot, skill.runtimePath);
-    assertInside(targetPath, homeRoot, `external skill runtime path escapes Codex home: ${skill.runtimePath}`);
-    const projection = classifyHostProjection(targetPath, source.sourceRoot, homeRoot);
-    records.push({
-      status: `external-skill-${projection.status}`,
-      subject: `${skill.name}:${skill.runtimePath}${projection.reason ? ` (${projection.reason})` : ""}`,
-      problem: projection.status !== "clean"
-    });
-  }
-  return { records, hasProblem: records.some((record) => record.problem) };
-}
-
 function inspectSimpleSet(set, homeRoot, records, observedNames) {
   for (const role of set.roles) {
     const rel = agentRuntimeRel(set, role).replace(/\\/g, "/");
@@ -857,56 +635,11 @@ function inspectSimpleSet(set, homeRoot, records, observedNames) {
     }
     const mismatch = summary.name !== role.name;
     records.push({
-      status: mismatch ? "agent-name-mismatch" : (set.ownership === "inventory-only" ? "inventory-ok" : "agent-owned"),
+      status: mismatch ? "agent-name-mismatch" : "agent-owned",
       subject: `${set.id}:${rel}`,
       problem: mismatch
     });
     addObservedName(observedNames, summary.name, rel, records);
-  }
-}
-
-function inspectJunctionSet(set, homeRoot, records, observedNames) {
-  const runtimeRoot = path.resolve(homeRoot, set.runtimeRoot);
-  const sourceRoot = resolveExternalPath(set.sourceRoot, set.sourceRootEnv);
-  let sourceOkay = false;
-  try {
-    const sourceStat = fs.lstatSync(sourceRoot);
-    sourceOkay = sourceStat.isDirectory() && !sourceStat.isSymbolicLink();
-  } catch {
-    sourceOkay = false;
-  }
-  let rootStatus = "external-junction-ok";
-  try {
-    const stat = fs.lstatSync(runtimeRoot);
-    if (!sourceOkay) {
-      rootStatus = "external-junction-source-missing";
-    } else if (!stat.isSymbolicLink() || !samePath(fs.realpathSync(runtimeRoot), sourceRoot)) {
-      rootStatus = "external-junction-drift";
-    }
-  } catch {
-    rootStatus = sourceOkay ? "external-junction-missing" : "external-junction-source-missing";
-  }
-  records.push({ status: rootStatus, subject: `${set.id}:${set.runtimeRoot}`, problem: rootStatus !== "external-junction-ok" });
-  for (const role of set.roles) {
-    const rel = agentRuntimeRel(set, role).replace(/\\/g, "/");
-    const profilePath = path.resolve(homeRoot, rel);
-    const summary = readProfileSummary(profilePath);
-    const status = summary.error
-      ? "external-agent-missing-or-invalid"
-      : summary.name === role.name ? "external-ok" : "agent-name-mismatch";
-    records.push({ status, subject: `${set.id}:${rel}`, problem: status !== "external-ok" });
-    if (!summary.error && summary.name) addObservedName(observedNames, summary.name, rel, records);
-  }
-  if (set.sharedFile) {
-    const source = fileInfo(resolveExternalPath(set.sharedFile.source, set.sharedFile.sourceEnv));
-    const targetPath = path.resolve(homeRoot, set.sharedFile.home);
-    const target = safeFileInfo(targetPath, homeRoot);
-    const okay = source.exists && source.isFile && target.exists && target.safe && source.hash === target.hash;
-    records.push({
-      status: okay ? "external-shared-prompt-ok" : "external-shared-prompt-drift",
-      subject: `${set.id}:${set.sharedFile.home}`,
-      problem: !okay
-    });
   }
 }
 
@@ -920,9 +653,8 @@ function addObservedName(observed, name, rel, records) {
   }
 }
 
-function inventoryTomlPaths(agentsRoot, sets) {
+function inventoryTomlPaths(agentsRoot) {
   const result = [];
-  const declaredRoots = new Set(sets.filter((set) => set.runtimeRoot).map((set) => normalizedPathKey(set.runtimeRoot)));
   function walk(currentRoot, currentRel) {
     let entries;
     try {
@@ -937,12 +669,6 @@ function inventoryTomlPaths(agentsRoot, sets) {
         result.push(rel);
       } else if (entry.isDirectory()) {
         walk(path.join(currentRoot, entry.name), rel);
-      } else if (entry.isSymbolicLink() && declaredRoots.has(normalizedPathKey(rel))) {
-        try {
-          walk(path.join(currentRoot, entry.name), rel);
-        } catch {
-          // The declared set inspector reports missing or unsafe roots without following unknown links.
-        }
       }
     }
   }
@@ -1017,7 +743,7 @@ function formatHash(hash) {
   return hash ? hash.slice(0, 12) : "-";
 }
 
-function printStatus(entries, tombstones, state, config, inventory, externalSkills) {
+function printStatus(entries, tombstones, state, config, inventory) {
   let hasProblem = false;
   for (const entry of entries) {
     const result = classify(entry, state);
@@ -1053,14 +779,10 @@ function printStatus(entries, tombstones, state, config, inventory, externalSkil
     if (record.problem) hasProblem = true;
     console.log(`${record.status.padEnd(34)} ${record.subject}`);
   }
-  for (const record of externalSkills.records) {
-    if (record.problem) hasProblem = true;
-    console.log(`${record.status.padEnd(34)} ${record.subject}`);
-  }
   return hasProblem ? 1 : 0;
 }
 
-function runDiff(entries, tombstones, config, inventory, externalSkills) {
+function runDiff(entries, tombstones, config, inventory) {
   let exitCode = 0;
   for (const entry of entries) {
     if (!entry.repoSafety.safe || !entry.homeSafety.safe) {
@@ -1124,10 +846,6 @@ function runDiff(entries, tombstones, config, inventory, externalSkills) {
   }
   for (const record of inventory.records) {
     console.log(`diff inventory ${record.status} ${record.subject}`);
-    if (record.problem) exitCode = 1;
-  }
-  for (const record of externalSkills.records) {
-    console.log(`diff external-skill ${record.status} ${record.subject}`);
     if (record.problem) exitCode = 1;
   }
   return exitCode;
@@ -1282,131 +1000,6 @@ function applyStagedItem(item, direction) {
   else console.log(`write  ${direction} state ${subject}`);
 }
 
-function planHostJunctions(manifest, homeRoot, direction) {
-  const plans = [];
-  const clean = [];
-  const skipped = [];
-  const refusals = [];
-  const projections = [];
-  for (const set of manifest.agentSets || []) {
-    if (set.ownership !== "external-junction" || set.hostProjectionOwner !== "prompt") continue;
-    projections.push({
-      kind: "agent",
-      identity: set.id,
-      runtimePath: set.runtimeRoot,
-      sourceRoot: resolveExternalPath(set.sourceRoot, set.sourceRootEnv)
-    });
-  }
-  for (const skill of manifest.externalSkills || []) {
-    if (direction === "pull") {
-      projections.push({
-        kind: "skill",
-        identity: skill.name,
-        runtimePath: skill.runtimePath,
-        sourceRoot: resolveExternalPath(skill.sourceRoot, skill.sourceRootEnv),
-        skill
-      });
-      continue;
-    }
-    const source = inspectExternalSkillSource(skill);
-    const data = inspectExternalSkillDataRoot(skill);
-    if (!source.okay) {
-      refusals.push(`refuse push junction ${skill.runtimePath}: external skill source is invalid (${source.reason})`);
-      continue;
-    }
-    if (!data.okay) {
-      refusals.push(`refuse push junction ${skill.runtimePath}: external skill data root is invalid (${data.reason})`);
-      continue;
-    }
-    projections.push({
-      kind: "skill",
-      identity: skill.name,
-      runtimePath: skill.runtimePath,
-      sourceRoot: source.sourceRoot,
-      skill
-    });
-  }
-  for (const projection of projections) {
-    const { sourceRoot, runtimePath } = projection;
-    const targetPath = path.resolve(homeRoot, runtimePath);
-    if (direction === "pull") {
-      skipped.push({ projection, targetPath, sourceRoot });
-      continue;
-    }
-    let sourceStat;
-    try {
-      sourceStat = fs.lstatSync(sourceRoot);
-    } catch {
-      refusals.push(`refuse push junction ${runtimePath}: source directory is missing`);
-      continue;
-    }
-    if (!sourceStat.isDirectory() || sourceStat.isSymbolicLink()) {
-      refusals.push(`refuse push junction ${runtimePath}: source is not an ordinary directory`);
-      continue;
-    }
-    const parentSafety = safeDirectoryInfo(path.dirname(targetPath), homeRoot);
-    if (!parentSafety.safe) {
-      refusals.push(`refuse push junction ${runtimePath}: unsafe parent path (${parentSafety.reason})`);
-      continue;
-    }
-    try {
-      const targetStat = fs.lstatSync(targetPath);
-      if (!targetStat.isSymbolicLink()) {
-        refusals.push(`refuse push junction ${runtimePath}: occupied by an ordinary file or directory`);
-      } else {
-        let resolved;
-        try { resolved = fs.realpathSync(targetPath); } catch { resolved = null; }
-        if (!resolved || !samePath(resolved, sourceRoot)) {
-          refusals.push(`refuse push junction ${runtimePath}: existing reparse target is ambiguous or wrong`);
-        } else {
-          clean.push({ projection, targetPath, sourceRoot });
-        }
-      }
-    } catch (error) {
-      if (error && error.code === "ENOENT") plans.push({ projection, targetPath, sourceRoot });
-      else refusals.push(`refuse push junction ${runtimePath}: cannot inspect target safely`);
-    }
-  }
-  return { plans, clean, skipped, refusals };
-}
-
-function applyHostJunctions(junctions, homeRoot, dryRun) {
-  let created = 0;
-  for (const item of junctions.clean) console.log(`clean  push junction ${item.projection.runtimePath}`);
-  for (const item of junctions.skipped) {
-    console.log(`skip   pull junction ${item.projection.runtimePath}: host projection is push-only`);
-  }
-  for (const item of junctions.plans) {
-    if (dryRun) {
-      console.log(`would create push junction ${item.projection.runtimePath} -> ${item.sourceRoot}`);
-      continue;
-    }
-    if (item.projection.kind === "skill") {
-      const source = inspectExternalSkillSource(item.projection.skill);
-      const data = inspectExternalSkillDataRoot(item.projection.skill);
-      if (!source.okay || !data.okay || !samePath(source.sourceRoot, item.sourceRoot)) {
-        console.log(`refuse push junction ${item.projection.runtimePath}: external skill source or data root changed before creation`);
-        return { ok: false, created };
-      }
-    }
-    const parentSafety = safeDirectoryInfo(path.dirname(item.targetPath), homeRoot);
-    if (!parentSafety.safe || fs.existsSync(item.targetPath)) {
-      console.log(`refuse push junction ${item.projection.runtimePath}: target changed before creation`);
-      return { ok: false, created };
-    }
-    fs.mkdirSync(path.dirname(item.targetPath), { recursive: true });
-    try {
-      createDirectoryLinkSync(item.sourceRoot, item.targetPath);
-    } catch (error) {
-      console.log(`refuse push junction ${item.projection.runtimePath}: creation failed (${error.code || "unknown"})`);
-      return { ok: false, created };
-    }
-    console.log(`create push junction ${item.projection.runtimePath}`);
-    created += 1;
-  }
-  return { ok: true, created };
-}
-
 function ensureStateHash(nextState, entry, hash) {
   nextState.files[entry.repo] = {
     repo: entry.repo,
@@ -1418,7 +1011,7 @@ function ensureStateHash(nextState, entry, hash) {
 
 function serializeState(state) {
   state.schema = 1;
-  state.managedBy = "systems/codex/scripts/sync-codex.mjs";
+  state.managedBy = "systems/nb-codex/scripts/sync-codex.mjs";
   state.updatedAt = new Date().toISOString();
   return `${JSON.stringify(state, null, 2)}\n`;
 }
@@ -1429,31 +1022,6 @@ function shouldRefusePush(status) {
 
 function shouldRefusePull(status) {
   return ["drift-unknown", "repo-ahead", "conflict", "repo-not-file"].includes(status);
-}
-
-function revalidateJunctionPlans(junctions, homeRoot) {
-  for (const item of junctions.clean) {
-    const classification = classifyHostProjection(item.targetPath, item.sourceRoot, homeRoot);
-    if (classification.status !== "clean") {
-      throw new Error(`junction changed after preflight: ${item.projection.runtimePath}`);
-    }
-  }
-  for (const item of junctions.plans) {
-    if (item.projection.kind === "skill") {
-      const source = inspectExternalSkillSource(item.projection.skill);
-      const data = inspectExternalSkillDataRoot(item.projection.skill);
-      if (!source.okay || !data.okay || !samePath(source.sourceRoot, item.sourceRoot)) {
-        throw new Error(`external skill source or data root changed: ${item.projection.runtimePath}`);
-      }
-    } else {
-      const source = safeAbsoluteDirectoryInfo(item.sourceRoot);
-      if (!source.safe) throw new Error(`junction source changed: ${item.projection.runtimePath}`);
-    }
-    const classification = classifyHostProjection(item.targetPath, item.sourceRoot, homeRoot);
-    if (classification.status !== "missing") {
-      throw new Error(`junction target changed after preflight: ${item.projection.runtimePath}`);
-    }
-  }
 }
 
 function revalidateTombstonePlan(plan, homeRoot, phase) {
@@ -1467,7 +1035,7 @@ function revalidateTombstonePlan(plan, homeRoot, phase) {
   }
 }
 
-function printDryRun(direction, copyPlans, cleanPlans, junctions, config, stateRel, tombstonePlans, inventory) {
+function printDryRun(direction, copyPlans, cleanPlans, config, stateRel, tombstonePlans, inventory) {
   for (const plan of copyPlans) console.log(`would stage ${direction} ${plan.entry.repo}`);
   if (direction === "push" && config && config.changes.length) {
     console.log(`would stage push config ${config.rel}`);
@@ -1477,7 +1045,6 @@ function printDryRun(direction, copyPlans, cleanPlans, junctions, config, stateR
     console.log(`clean  ${direction} ${plan.entry.repo}`);
   }
   for (const plan of copyPlans) console.log(`would copy ${direction} ${plan.entry.repo}`);
-  applyHostJunctions(junctions, null, true);
   if (direction === "push" && config) {
     console.log(config.changes.length ? `would patch config ${config.rel}` : `clean  push config ${config.rel}`);
   } else if (config) {
@@ -1503,8 +1070,6 @@ function syncDirection({ direction, entries, tombstones, state, manifest, homeRo
   const tombstonePlans = [];
   const cleanPlans = [];
   const refusals = [];
-  const junctions = planHostJunctions(manifest, homeRoot, direction);
-  refusals.push(...junctions.refusals.map((message) => `${message}; --force cannot bypass junction ownership safety`));
   const syncStateSafety = state.syncFileSnapshot || safeFileInfo(statePath(manifest, homeRoot), homeRoot);
   if (!syncStateSafety.safe) {
     refusals.push(`refuse ${direction}: unsafe state path (${syncStateSafety.reason}); --force cannot bypass path safety`);
@@ -1606,7 +1171,7 @@ function syncDirection({ direction, entries, tombstones, state, manifest, homeRo
   const stateTarget = statePath(manifest, homeRoot);
   const stateRel = manifest.stateFile || ".prompt-sync-state.json";
   if (dryRun) {
-    printDryRun(direction, copyPlans, cleanPlans, junctions, config, stateRel, tombstonePlans, inventory);
+    printDryRun(direction, copyPlans, cleanPlans, config, stateRel, tombstonePlans, inventory);
     return copyPlans.length || tombstonePlans.length || (direction === "push" && config && config.changes.length) ? 1 : 0;
   }
 
@@ -1630,7 +1195,6 @@ function syncDirection({ direction, entries, tombstones, state, manifest, homeRo
   try {
     testPause("before-global-revalidation");
     for (const item of stage.items) revalidateStagedItem(item);
-    revalidateJunctionPlans(junctions, homeRoot);
     for (const plan of tombstonePlans) revalidateTombstonePlan(plan, homeRoot, "before apply");
   } catch (error) {
     removeUnusedTemps(stage, true);
@@ -1647,9 +1211,6 @@ function syncDirection({ direction, entries, tombstones, state, manifest, homeRo
       applyStagedItem(item, direction);
       applied += 1;
     }
-    const junctionResult = applyHostJunctions(junctions, homeRoot, false);
-    applied += junctionResult.created;
-    if (!junctionResult.ok) throw new Error("junction application refused");
 
     if (direction === "push" && config) {
       if (stage.configItem) {
@@ -1729,6 +1290,12 @@ async function runPortable(options) {
     console.log(`portable plan: ${path.join(systemRoot, ".nb-codex", "install-plan.json")}`);
     console.log(`fingerprint:   ${plan.fingerprint}`);
     console.log(`changes:       ${pending}; selected home unchanged`);
+    const seed = (plan.seeds ?? [])[0];
+    if (seed?.state === "keep-existing") {
+      console.log("AGENTS.md:     keep-existing; merge into templates/AGENTS.md per docs/agents-merge.md after apply");
+    } else if (seed?.state === "create") {
+      console.log("AGENTS.md:     create");
+    }
     return;
   }
   if (options.portableCommand === "apply") {
@@ -1793,16 +1360,15 @@ const state = loadState(manifest, options.home);
 const features = manifest.configPatch ? discoverFeatures() : { probed: true, names: new Set() };
 const config = analyzeConfig(manifest, options.home, features);
 const inventory = inspectAgentInventory(manifest, options.home);
-const externalSkills = inspectExternalSkills(manifest, options.home);
 
 console.log(`system: ${systemRoot}`);
 console.log(`home:   ${options.home}`);
 
 if (options.command === "status") {
-  process.exit(printStatus(entries, tombstones, state, config, inventory, externalSkills));
+  process.exit(printStatus(entries, tombstones, state, config, inventory));
 }
 if (options.command === "diff") {
-  process.exit(runDiff(entries, tombstones, config, inventory, externalSkills));
+  process.exit(runDiff(entries, tombstones, config, inventory));
 }
 if (options.command === "push" || options.command === "pull") {
   const code = syncDirection({

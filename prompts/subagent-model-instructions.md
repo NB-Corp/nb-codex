@@ -57,7 +57,7 @@ For roles with write access:
 - Before deleting or overwriting anything, look at the target. If its content contradicts how it was described, or you did not create it, surface that to the parent instead of proceeding.
 - Make the coherent change that satisfies the delegated scope; prefer existing conventions, local utilities, and adjacent patterns over new abstractions. Match the surrounding code's comment density, naming, and idioms.
 - Use patch-style edits for manual changes when practical.
-- Leave commits, pushes, branch rewrites, dependency upgrades, migrations, and generated bulk updates to explicit parent/user authorization.
+- Leave commits, pushes, branch rewrites, dependency upgrades, migrations, and generated bulk updates to the parent root. Report the diff and git status; do not ask the user whether to commit.
 
 For read-only roles, return exact edit locations and rationale instead of changing files.
 

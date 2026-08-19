@@ -2,7 +2,6 @@
   "schema": 2,
   "name": "nb-codex-install",
   "description": "One-time nb-codex install: overwrite the root prompt, write config.toml overlay values, and copy coding agents, the parallel-collab skill, and the model catalog. AGENTS.md is seeded only when absent.",
-  "defaultHome": "~/.codex",
   "stateFile": ".nb-codex-sync-state.json",
   "modelCatalog": {
     "repo": "models.json",
@@ -13,7 +12,7 @@
     "values": [
       { "path": "model", "value": "gpt-5.6-sol" },
       { "path": "model_reasoning_effort", "value": "xhigh" },
-      { "path": "model_auto_compact_token_limit", "value": 345000 },
+      { "path": "model_auto_compact_token_limit", "value": 270000 },
       { "path": "model_catalog_json", "homePath": "models.json" },
       { "path": "model_instructions_file", "homePath": "prompts/system-prompt-neutral.md" },
       { "path": "service_tier", "value": "default" },
@@ -60,7 +59,6 @@
       ]
     }
   ],
-  "externalSkills": [],
   "files": [
     {
       "repo": "models.json",

@@ -220,10 +220,7 @@ async function loadPortableProfile(baseDir) {
   if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 3 || agentFiles.length !== 7 || coreSkills.length !== 1) {
     fail('canonical manifest must resolve to 3 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
   }
-  if (!profile.externalComponents || typeof profile.externalComponents !== 'object' || Array.isArray(profile.externalComponents)) {
-    fail('portable profile externalComponents is invalid');
-  }
-  if (Object.keys(profile.externalComponents).length !== 0) fail('portable profile must not declare external components');
+  if (Object.hasOwn(profile, 'externalComponents')) fail('portable profile must not declare externalComponents');
   return {
     manifest: { ...profile, syncManifest: syncManifestRel, exactFiles, agentFiles, coreSkills, coreSkillFiles, seedIfAbsent: [{ repo: seedRepo, home: seedHome }] },
     bytes: await readFile(file),
@@ -235,12 +232,17 @@ async function loadPortableProfile(baseDir) {
 function validateRuntimeConfig(config, configPath) {
   if (config?.schemaVersion !== LOCAL_CONFIG_SCHEMA) fail(`${configPath} schemaVersion must be ${LOCAL_CONFIG_SCHEMA}; run portable init`);
   config.codexHome = absolute(config.codexHome, 'codexHome');
-  if (config.productFeedbackDataRoot) fail('this installer does not adopt external components');
-  delete config.productFeedbackDataRoot;
-  if (config.adoptions && typeof config.adoptions === 'object' && !Array.isArray(config.adoptions) && Object.keys(config.adoptions).length) {
+  const allowed = new Set(['schemaVersion', 'codexHome', 'codexCli']);
+  for (const key of Object.keys(config)) {
+    if (allowed.has(key)) continue;
+    const value = config[key];
+    const emptyObject = value && typeof value === 'object' && !Array.isArray(value) && Object.keys(value).length === 0;
+    if (value == null || emptyObject) {
+      delete config[key];
+      continue;
+    }
     fail('this installer does not adopt external components');
   }
-  delete config.adoptions;
   if (config.codexCli !== null && config.codexCli !== undefined) config.codexCli = absolute(config.codexCli, 'codexCli');
   else config.codexCli = null;
   return config;

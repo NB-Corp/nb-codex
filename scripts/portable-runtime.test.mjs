@@ -27,17 +27,24 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.equal(packageManifest.name, "nb-codex");
   assert.equal(portableProfile.id, "portable-core");
   assert.deepEqual(portableProfile.seedIfAbsent, [{ repo: "templates/AGENTS.md", home: "AGENTS.md" }]);
-  assert.deepEqual(portableProfile.externalComponents, {});
+  assert.equal("externalComponents" in portableProfile, false);
   const runtimeSource = await readFile(path.join(projectRoot, "src", "portable-runtime.mjs"), "utf8");
-  assert.doesNotMatch(runtimeSource, /ProductStewardship|science-agents|product-feedback-cli|validateScienceAdoption|validateFeedback/);
+  assert.doesNotMatch(runtimeSource, /ProductStewardship|science-agents|product-feedback|validateScienceAdoption|validateFeedback/);
   const installerSource = await readFile(path.join(projectRoot, "scripts", "sync-codex.mjs"), "utf8");
-  assert.doesNotMatch(installerSource, /--adopt|--product-feedback-data-root/);
+  assert.doesNotMatch(installerSource, /--adopt|external-junction|inventory-only|product-feedback|science-agents/);
   assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md" || entry.repo === "templates/AGENTS.md" || entry.home === "AGENTS.md"), false);
   assert.equal(manifest.files.some((entry) => entry.repo.includes("nia")), false);
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath, "prompts/system-prompt-neutral.md");
   assert.doesNotMatch(prompt, /\bNia\b|妮娅|本宝宝|杂鱼大叔/);
   assert.match(prompt, /Content And Tone Floor/);
+  assert.doesNotMatch(prompt, /without asking whether to commit|should I commit/);
+  assert.match(agents, /版本管理由 root 负责/);
+  assert.match(agents, /直接做本地 commit/);
   assert.match(agents, /协作边界|验证边界/);
+  assert.doesNotMatch(agents, /先脑暴|\bPurpose\b|fork_turns/);
+  assert.equal([...agents.matchAll(/匹配 hash 只证明字节相同/g)].length, 1);
+  const agentLineCount = agents.replace(/(?:\r?\n)+$/, "").split(/\r?\n/).length;
+  assert.ok(agentLineCount <= 145, `AGENTS template is ${agentLineCount} lines`);
   assert.doesNotMatch(agents, /\{CODEX_HOME\}|policies\/collaboration|Assay|brainstorm-to-decision|codex-agent-profile/);
   assert.doesNotMatch(agents, /xxoy1|ProductStewardship|妮娅|本宝宝|nb-codex 提供|本模板|science_\*|critic frame audit|本包装/);
   await assert.rejects(lstat(path.join(projectRoot, "agents", "critic.toml")), { code: "ENOENT" });
@@ -62,9 +69,18 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   }
   const readme = await readFile(path.join(projectRoot, "README.md"), "utf8");
   assert.doesNotMatch(readme, /critic\.toml|worker-lite|codex-agent-profile/);
+  assert.match(readme, /模板为骨架/);
+  assert.doesNotMatch(readme, /Join-Path \$HOME "\.codex"/);
+  const mergeDoc = await readFile(path.join(projectRoot, "docs", "agents-merge.md"), "utf8");
+  assert.match(mergeDoc, /以模板为骨架/);
+  assert.match(mergeDoc, /主要冲突/);
+  assert.match(mergeDoc, /得到回答前不要写文件/);
+  assert.match(mergeDoc, /还有未决的主要冲突就停/);
   const subagent = await readFile(path.join(projectRoot, "prompts", "subagent-model-instructions.md"), "utf8");
   assert.doesNotMatch(subagent, /Assay|A `lite` name|Feature flags are defense in depth/);
   assert.match(subagent, /built-in `default`, `explorer`, and `worker`/);
+  assert.match(subagent, /Leave commits[\s\S]*parent root/);
+  assert.doesNotMatch(subagent, /parent\/user authorization/);
 
   function developerInstructions(text, file) {
     const match = text.match(/developer_instructions\s*=\s*"""\r?\n([\s\S]*?)\r?\n"""/);
@@ -171,6 +187,8 @@ test("portable init is explicit and plan leaves the selected home byte-for-byte 
   const beforeConfig = await readFile(path.join(item.baseDir, ".nb-codex.local.json"));
   const output = okay(run(item, ["portable", "plan"]), "portable plan");
   assert.match(output, /selected home unchanged/);
+  assert.match(output, /AGENTS\.md:\s+create/);
+  assert.doesNotMatch(output, /keep-existing/);
   await missing(item.home);
   assert.deepEqual(await readFile(path.join(item.baseDir, ".nb-codex.local.json")), beforeConfig);
   assert.deepEqual(await readdir(path.join(item.baseDir, ".nb-codex", "feature-probes")), []);
@@ -196,7 +214,7 @@ test("managed TOML integers accept only separators between digits", async () => 
   await initialize(item);
   await planApply(item);
   const config = path.join(item.home, "config.toml");
-  await writeFile(config, (await readFile(config, "utf8")).replace("model_auto_compact_token_limit = 345000", "model_auto_compact_token_limit = 345_"));
+  await writeFile(config, (await readFile(config, "utf8")).replace("model_auto_compact_token_limit = 270000", "model_auto_compact_token_limit = 270_"));
   const doctor = run(item, ["portable", "doctor"]);
   assert.notEqual(doctor.status, 0);
   assert.match(doctor.stderr, /invalid managed scalar model_auto_compact_token_limit|managed value is not a supported scalar/);
@@ -230,7 +248,9 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   ].join("\n");
   await writeFile(path.join(item.home, "config.toml"), opaque);
   await initialize(item);
-  okay(run(item, ["portable", "plan"]), "portable plan");
+  const planOut = okay(run(item, ["portable", "plan"]), "portable plan");
+  assert.match(planOut, /AGENTS\.md:\s+keep-existing/);
+  assert.match(planOut, /docs\/agents-merge\.md/);
   assert.equal(await readFile(path.join(item.home, "config.toml"), "utf8"), opaque, "plan must not mutate selected-home config");
   await planApply(item);
   const ownershipMarker = JSON.parse(await readFile(path.join(item.home, ".nb-codex-managed.json"), "utf8"));
@@ -435,21 +455,14 @@ test("doctor detects managed file, config, and link tamper", async () => {
   assert.match(run(markerCase, ["portable", "doctor"]).stderr, /ownership marker is stale or modified/);
 });
 
-test("portable installer rejects external adoption flags", async () => {
-  const item = await fixture("unknown-adopt");
-  const adopt = run(item, [
+test("portable installer rejects unknown arguments", async () => {
+  const item = await fixture("unknown-flag");
+  const result = run(item, [
     "portable", "init", "--home", item.home, "--codex-cli", item.codexCli,
-    "--adopt", `other=${item.root}`
+    "--not-a-real-flag", item.root
   ]);
-  assert.notEqual(adopt.status, 0);
-  assert.match(adopt.stderr, /unknown argument: --adopt/);
-
-  const feedback = run(item, [
-    "portable", "init", "--home", item.home, "--codex-cli", item.codexCli,
-    "--product-feedback-data-root", item.root
-  ]);
-  assert.notEqual(feedback.status, 0);
-  assert.match(feedback.stderr, /unknown argument: --product-feedback-data-root/);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /unknown argument: --not-a-real-flag/);
 });
 
 test("portable plan refuses leftover external adoptions in local config", async () => {
