@@ -247,6 +247,13 @@ test("repository manifest ships seven coding roles, overwrites the neutral promp
     manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath,
     "prompts/system-prompt-neutral.md"
   );
+  assert.deepEqual(manifest.configPatch.values.map((entry) => entry.path).sort(), [
+    "agents.max_concurrent_threads_per_session",
+    "features.multi_agent_v2.multi_agent_mode_hint_text",
+    "model_catalog_json",
+    "model_instructions_file"
+  ]);
+  assert.equal(manifest.configPatch.absent.includes("model_context_window"), false);
   assert.equal("externalSkills" in manifest, false);
   assert.deepEqual(manifest.configPatch.legacyAgentTables, []);
 

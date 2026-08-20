@@ -1285,6 +1285,7 @@ async function runPortable(options) {
     const plan = await createInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged });
     const pending = plan.files.filter((item) => item.state !== "matching").length +
       (plan.seeds ?? []).filter((item) => item.state === "create").length +
+      (plan.skillRoots ?? []).filter((item) => item.state === "replace-link-with-copy").length +
       plan.links.filter((item) => item.state !== "matching").length +
       (plan.config.state === "matching" ? 0 : 1) + (plan.marker.state === "matching" ? 0 : 1);
     console.log(`portable plan: ${path.join(systemRoot, ".nb-codex", "install-plan.json")}`);
@@ -1314,6 +1315,9 @@ async function runPortable(options) {
   const result = await doctorRuntime({ baseDir: systemRoot, config });
   console.log(`portable ${options.portableCommand}: ok`);
   console.log(`managed: ${result.fileCount} files, ${result.linkCount} links`);
+  for (const relative of result.leftovers ?? []) {
+    console.log(`leftover: ${relative}; not managed — delete it manually if unused`);
+  }
 }
 
 async function routePortableOwnedLegacyHome(options) {

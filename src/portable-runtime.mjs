@@ -29,6 +29,12 @@ const LOCAL_CONFIG_FILE = '.nb-codex.local.json';
 const RECEIPT_ROOT = '.nb-codex';
 const INSTALL_PLAN_FILE = `${RECEIPT_ROOT}/install-plan.json`;
 const HOME_MARKER_FILE = '.nb-codex-managed.json';
+const RETIRED_HOME_RELATIVES = [
+  'agents/critic.toml',
+  'agents/check.toml',
+  'agents/worker-lite.toml',
+  'agents/worker.toml',
+];
 
 function fail(message) {
   throw new Error(message);
@@ -203,7 +209,7 @@ async function loadPortableProfile(baseDir) {
     return [skill, files];
   }));
   const exactFiles = [...fileByRepo.values()]
-    .filter((entry) => entry.repo !== 'AGENTS.md' && !agentPaths.has(entry.repo) && !entry.repo.startsWith(skillPrefix))
+    .filter((entry) => entry.repo !== 'AGENTS.md' && !agentPaths.has(entry.repo))
     .map((entry) => {
       if (entry.home !== entry.repo) fail(`canonical portable file mapping must preserve its relative path: ${entry.repo}`);
       return entry.repo;
@@ -217,8 +223,8 @@ async function loadPortableProfile(baseDir) {
   if (seedRepo !== 'templates/AGENTS.md' || seedHome !== 'AGENTS.md') {
     fail('portable seed-if-absent must be templates/AGENTS.md → AGENTS.md');
   }
-  if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 3 || agentFiles.length !== 7 || coreSkills.length !== 1) {
-    fail('canonical manifest must resolve to 3 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
+  if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 8 || agentFiles.length !== 7 || coreSkills.length !== 1) {
+    fail('canonical manifest must resolve to 8 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
   }
   if (Object.hasOwn(profile, 'externalComponents')) fail('portable profile must not declare externalComponents');
   return {
@@ -332,7 +338,7 @@ async function desiredRuntimeFiles(baseDir, manifest, config) {
     text = text.replace(anchor, `model_instructions_file = "${portable(config.codexHome)}/`);
     files.push({ relative: `agents/${name}`, source, bytes: Buffer.from(text), transform: 'absolute-prompt-path' });
   }
-  if (files.length !== 10) fail(`portable profile materialized an unexpected file count: ${files.length}`);
+  if (files.length !== 15) fail(`portable profile materialized an unexpected file count: ${files.length}`);
   return files;
 }
 
@@ -405,32 +411,50 @@ async function fingerprintDirectory(root) {
   return { entries, sha256: fingerprint(entries) };
 }
 
-async function buildLinkPlan(baseDir, manifest, config) {
-  const links = [];
+function skillRootRelative(relative) {
+  const parts = relative.split('/');
+  if (parts[0] === 'skills' && parts.length >= 2) return `skills/${parts[1]}`;
+  return null;
+}
+
+async function buildSkillRootPlan(baseDir, manifest, config, replaceManaged) {
+  const roots = [];
   for (const skill of manifest.coreSkills) {
-    links.push({
-      relative: `skills/${skill}`,
-      source: path.join(baseDir, 'skills', skill),
+    const relative = `skills/${skill}`;
+    const source = path.join(baseDir, 'skills', skill);
+    await assertOrdinaryExistingDirectory(source, `runtime source ${relative}`);
+    const target = path.join(config.codexHome, ...relative.split('/'));
+    const observed = await observeFile(target);
+    let state;
+    if (observed.type === 'absent') state = 'create';
+    else if (observed.type === 'directory') state = 'matching';
+    else if (observed.type === 'link') {
+      if (!replaceManaged) {
+        fail(`managed skill is still a link; plan again with --replace-managed to replace it with a copy: ${target}`);
+      }
+      state = 'replace-link-with-copy';
+    } else fail(`managed skill target is occupied and cannot be replaced: ${target}`);
+    roots.push({
+      relative,
+      source,
+      sourceRealpath: portable(await realpath(source)),
       owner: 'nb-codex',
       expectedFiles: manifest.coreSkillFiles[skill],
+      target,
+      observed,
+      state,
     });
   }
-  for (const item of links) {
-    await assertOrdinaryExistingDirectory(item.source, `runtime source ${item.relative}`);
-    item.sourceRealpath = portable(await realpath(item.source));
-    item.sourceTree = await fingerprintDirectory(item.source);
-    item.target = path.join(config.codexHome, ...item.relative.split('/'));
-    item.observed = await observeFile(item.target);
-    if (item.observed.type === 'link') {
-      const expected = item.sourceRealpath;
-      if (item.observed.dangling || item.observed.link !== expected) {
-        fail(`managed link is ${item.observed.dangling ? 'dangling' : 'pointing to the wrong source'}: ${item.target}; run portable repair-links from the current repository, then portable plan/apply`);
-      }
-      item.state = 'matching';
-    } else if (item.observed.type === 'absent') item.state = 'create';
-    else fail(`managed skill target is occupied and cannot be replaced: ${item.target}`);
-  }
-  return links;
+  return roots;
+}
+
+function skillRootIdentity(roots) {
+  return roots.map((item) => ({
+    relative: item.relative,
+    sourceRealpath: item.sourceRealpath,
+    owner: item.owner,
+    expectedFiles: item.expectedFiles,
+  }));
 }
 
 function fingerprint(value) {
@@ -521,15 +545,13 @@ export async function repairPortableLinks({ baseDir, config }) {
     const target = path.resolve(config.codexHome, ...record.relative.split('/'));
     if (!inside(config.codexHome, target)) fail(`portable repair link escapes selected home: ${record.relative}`);
     const observed = await observeFile(target);
-    if (observed.type === 'absent') continue;
-    if (observed.type !== 'link') fail(`portable repair refuses an ordinary occupied target: ${target}`);
-    const expectedSource = path.join(baseDir, ...record.relative.split('/'));
-    await assertOrdinaryExistingDirectory(expectedSource, `current core skill ${record.relative}`);
-    const expectedRealpath = portable(await realpath(expectedSource));
-    if (!observed.dangling && observed.link === expectedRealpath) {
+    if (observed.type === 'absent') {
       clean.push(record.relative);
       continue;
     }
+    if (observed.type !== 'link') fail(`portable repair refuses an ordinary occupied target: ${target}`);
+    const expectedSource = path.join(baseDir, ...record.relative.split('/'));
+    await assertOrdinaryExistingDirectory(expectedSource, `current core skill ${record.relative}`);
     const immediate = await observeFile(target);
     if (!observationsEqual(immediate, observed)) fail(`portable repair link changed before unlink: ${target}`);
     await unlink(target);
@@ -557,11 +579,14 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
   const seed = await planSeedIfAbsent(baseDir, manifest, config);
+  const skillRoots = await buildSkillRootPlan(baseDir, manifest, config, replaceManaged);
+  const replacingSkills = new Set(skillRoots.filter((item) => item.state === 'replace-link-with-copy').map((item) => item.relative));
   const fileEntries = [];
   const replacements = [];
   for (const item of desired) {
     const target = path.join(config.codexHome, ...item.relative.split('/'));
-    const observed = await observeFile(target);
+    const root = skillRootRelative(item.relative);
+    const observed = root && replacingSkills.has(root) ? { type: 'absent' } : await observeFile(target);
     const desiredHash = sha256(item.bytes);
     let state;
     if (observed.type === 'absent') state = 'create';
@@ -585,13 +610,14 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     configState = 'replace-managed-overlay';
     replacements.push('config.toml');
   }
-  const links = await buildLinkPlan(baseDir, manifest, config);
+  const links = [];
   const sourceIdentity = {
     profileSha256: sha256(profileBytes),
     syncManifestSha256: sha256(syncManifestBytes),
     files: fileEntries.map((item) => ({ relative: item.relative, desiredSha256: item.desiredSha256, transform: item.transform })),
     seed: { relative: seed.relative, repo: seed.repo, desiredSha256: seed.desiredSha256, transform: seed.transform },
-    links: links.map((item) => ({ relative: item.relative, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, owner: item.owner, manifestFiles: item.expectedFiles ?? null })),
+    links,
+    skillRoots: skillRootIdentity(skillRoots),
   };
   const desiredMarker = buildHomeMarker({ baseDir, config, manifest, sourceIdentity, fileEntries, links });
   const desiredMarkerBytes = markerBytes(desiredMarker);
@@ -612,7 +638,8 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
   const targetIdentity = {
     files: fileEntries.map((item) => ({ relative: item.relative, observed: item.observed })),
     config: configObserved,
-    links: links.map((item) => ({ relative: item.relative, observed: item.observed })),
+    links,
+    skillRoots: skillRoots.map((item) => ({ relative: item.relative, observed: item.observed, state: item.state })),
     marker: markerObserved,
   };
   const optionsIdentity = {
@@ -647,7 +674,15 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
       state: seed.state,
     }],
     config: { target: configTarget, desiredSha256: configHash, observed: configObserved, state: configState },
-    links: links.map((item) => ({ relative: item.relative, source: item.source, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, target: item.target, observed: item.observed, state: item.state })),
+    links,
+    skillRoots: skillRoots.map((item) => ({
+      relative: item.relative,
+      source: item.source,
+      sourceRealpath: item.sourceRealpath,
+      target: item.target,
+      observed: item.observed,
+      state: item.state,
+    })),
     marker: { relative: HOME_MARKER_FILE, target: markerTarget, desiredSha256: markerDesiredSha256, observed: markerObserved, state: markerState },
     replacements,
   };
@@ -670,6 +705,29 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
 async function createFixedParents(home, operations) {
   const dirs = [home, ...['agents', 'prompts', 'skills'].map((name) => path.join(home, name))];
   for (const directory of dirs) {
+    if (await exists(directory)) {
+      const stat = await lstat(directory);
+      if (stat.isSymbolicLink() || !stat.isDirectory()) fail(`managed parent is unsafe: ${directory}`);
+    } else {
+      await mkdir(directory);
+      operations.push({ kind: 'created-dir', target: directory });
+    }
+  }
+}
+
+async function createManagedFileParents(home, relatives, operations) {
+  const dirs = new Set();
+  for (const relative of relatives) {
+    let dir = path.dirname(path.join(home, ...relative.split('/')));
+    while (inside(home, dir) && dir !== home) {
+      dirs.add(dir);
+      const parent = path.dirname(dir);
+      if (parent === dir) break;
+      dir = parent;
+    }
+  }
+  const ordered = [...dirs].sort((left, right) => left.split(path.sep).length - right.split(path.sep).length || left.localeCompare(right));
+  for (const directory of ordered) {
     if (await exists(directory)) {
       const stat = await lstat(directory);
       if (stat.isSymbolicLink() || !stat.isDirectory()) fail(`managed parent is unsafe: ${directory}`);
@@ -747,6 +805,12 @@ async function maybeInjectRollbackDrift(operations) {
 }
 
 async function rollbackOperation(operation) {
+  if (operation.kind === 'removed-link') {
+    const observed = await observeFile(operation.target);
+    if (observed.type !== 'absent') return 'removed link target is no longer absent';
+    createDirectoryLinkSync(operation.source, operation.target);
+    return null;
+  }
   if (operation.kind === 'created-link') {
     const observed = await observeFile(operation.target);
     if (observed.type !== 'link' || observed.dangling || !observed.link || !samePath(observed.link, operation.sourceRealpath)) return 'link no longer matches invocation-created target';
@@ -788,7 +852,22 @@ export async function applyInstallPlan({ baseDir, config, replaceManaged = false
   let mutationCount = 0;
   try {
     await createFixedParents(config.codexHome, operations);
-    await maybeInjectTargetDrift([...current.files, { ...current.config, relative: 'config.toml' }, ...current.links, current.marker]);
+    for (const item of current.skillRoots ?? []) {
+      if (item.state !== 'replace-link-with-copy') continue;
+      await recheckTarget(item, `managed skill root ${item.relative}`);
+      await unlink(item.target);
+      operations.push({
+        kind: 'removed-link',
+        relative: item.relative,
+        target: item.target,
+        source: item.source,
+        sourceRealpath: item.sourceRealpath,
+      });
+      mutationCount += 1;
+      await maybeInjectedFailure(mutationCount);
+    }
+    await createManagedFileParents(config.codexHome, current.files.map((item) => item.relative), operations);
+    await maybeInjectTargetDrift([...current.files, { ...current.config, relative: 'config.toml' }, current.marker]);
     for (const item of current.files) {
       if (item.state === 'matching') continue;
       await recheckTarget(item, `managed file ${item.relative}`);
@@ -832,19 +911,6 @@ export async function applyInstallPlan({ baseDir, config, replaceManaged = false
         operations.push({ kind: 'replaced-file', relative: 'config.toml', target: current.config.target, backup, createdSha256: current.config.desiredSha256 });
       } else operations.push({ kind: 'created-file', relative: 'config.toml', target: current.config.target, createdSha256: current.config.desiredSha256 });
       await writePlannedFile(configItem, desiredConfigBytes);
-      mutationCount += 1;
-      await maybeInjectedFailure(mutationCount);
-    }
-    for (const item of current.links) {
-      if (item.state === 'matching') continue;
-      await assertOrdinaryExistingDirectory(item.source, `runtime source ${item.relative}`);
-      const sourceRealpath = portable(await realpath(item.source));
-      if (!samePath(sourceRealpath, item.sourceRealpath)) fail(`managed skill source changed after the approved plan: ${item.source}`);
-      const sourceTree = await fingerprintDirectory(item.source);
-      if (sourceTree.sha256 !== item.sourceTreeSha256) fail(`managed link source bytes changed after the approved plan: ${item.source}`);
-      await recheckTarget(item, `managed skill ${item.relative}`);
-      createDirectoryLinkSync(item.source, item.target);
-      operations.push({ kind: 'created-link', relative: item.relative, target: item.target, sourceRealpath: item.sourceRealpath });
       mutationCount += 1;
       await maybeInjectedFailure(mutationCount);
     }
@@ -914,6 +980,21 @@ export async function doctorRuntime({ baseDir, config }) {
   const spec = buildOverlaySpec(syncManifest, config.codexHome, featureProbe.stdout);
   const desired = await desiredRuntimeFiles(baseDir, manifest, config);
   const seed = await planSeedIfAbsent(baseDir, manifest, config);
+  const skillRoots = [];
+  for (const skill of manifest.coreSkills) {
+    const source = path.join(baseDir, 'skills', skill);
+    await assertOrdinaryExistingDirectory(source, `runtime source skills/${skill}`);
+    const target = path.join(config.codexHome, 'skills', skill);
+    const observed = await observeFile(target);
+    if (observed.type === 'link') fail(`installed managed skill is a link, not a copy: ${target}`);
+    if (observed.type !== 'directory') fail(`installed managed skill directory is missing: ${target}`);
+    skillRoots.push({
+      relative: `skills/${skill}`,
+      sourceRealpath: portable(await realpath(source)),
+      owner: 'nb-codex',
+      expectedFiles: manifest.coreSkillFiles[skill],
+    });
+  }
   for (const item of desired) {
     const target = path.join(config.codexHome, ...item.relative.split('/'));
     const observed = await observeFile(target);
@@ -924,8 +1005,7 @@ export async function doctorRuntime({ baseDir, config }) {
   if (observedConfig.type !== 'file') fail(`installed managed config is missing: ${configTarget}`);
   const currentConfig = await readFile(configTarget, 'utf8');
   if (!structuralConfigOverlayValid(currentConfig, spec)) fail(`installed managed config overlay drifted: ${configTarget}`);
-  const links = await buildLinkPlan(baseDir, manifest, config);
-  for (const link of links) if (link.state !== 'matching') fail(`installed managed skill link is missing: ${link.target}`);
+  const links = [];
   const fileEntries = desired.map((item) => ({
     relative: item.relative,
     desiredSha256: sha256(item.bytes),
@@ -936,22 +1016,34 @@ export async function doctorRuntime({ baseDir, config }) {
     syncManifestSha256: sha256(syncManifestBytes),
     files: fileEntries,
     seed: { relative: seed.relative, repo: seed.repo, desiredSha256: seed.desiredSha256, transform: seed.transform },
-    links: links.map((item) => ({ relative: item.relative, sourceRealpath: item.sourceRealpath, sourceTreeSha256: item.sourceTree.sha256, owner: item.owner, manifestFiles: item.expectedFiles ?? null })),
+    links,
+    skillRoots,
   };
   const desiredMarker = buildHomeMarker({ baseDir, config, manifest, sourceIdentity, fileEntries, links });
   const markerInspection = await inspectPortableHomeMarker(config.codexHome);
   if (!markerInspection.present) fail(`portable ownership marker is missing: ${markerInspection.target}`);
   if (markerInspection.error) fail(markerInspection.error);
   if (!samePath(markerInspection.marker.sourceRepository, baseDir)) {
-    fail(`portable repository moved from ${markerInspection.marker.sourceRepository} to ${portable(baseDir)}; run portable repair-links, then portable plan/apply`);
+    fail(`portable repository moved from ${markerInspection.marker.sourceRepository} to ${portable(baseDir)}; run portable plan/apply`);
   }
   if (markerInspection.observed.sha256 !== sha256(markerBytes(desiredMarker))) {
     fail(`portable ownership marker is stale or modified: ${markerInspection.target}`);
   }
+  const leftovers = [];
+  for (const relative of RETIRED_HOME_RELATIVES) {
+    const target = path.join(config.codexHome, ...relative.split('/'));
+    try {
+      const stat = await lstat(target);
+      if (stat.isFile()) leftovers.push(relative);
+    } catch (error) {
+      if (error.code !== 'ENOENT') throw error;
+    }
+  }
   return {
     fileCount: desired.length,
-    linkCount: links.length,
+    linkCount: 0,
     features: spec.exposed,
+    leftovers,
   };
 }
 

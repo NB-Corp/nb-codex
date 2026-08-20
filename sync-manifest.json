@@ -10,12 +10,8 @@
   "configPatch": {
     "home": "config.toml",
     "values": [
-      { "path": "model", "value": "gpt-5.6-sol" },
-      { "path": "model_reasoning_effort", "value": "xhigh" },
-      { "path": "model_auto_compact_token_limit", "value": 270000 },
       { "path": "model_catalog_json", "homePath": "models.json" },
       { "path": "model_instructions_file", "homePath": "prompts/system-prompt-neutral.md" },
-      { "path": "service_tier", "value": "default" },
       { "path": "agents.max_concurrent_threads_per_session", "value": 15 },
       {
         "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
@@ -35,9 +31,6 @@
       }
     ],
     "absent": [
-      "model_context_window",
-      "model_supports_reasoning_summaries",
-      "model_reasoning_summary",
       "stream_idle_timeout_ms",
       "default_mode_request_user_input",
       "features.js_repl"

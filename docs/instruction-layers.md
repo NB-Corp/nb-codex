@@ -9,9 +9,9 @@
 | 载体 | 安装时 | 运行时责任 |
 | --- | --- | --- |
 | `prompts/system-prompt-neutral.md` | 覆盖用户根提示词 | 身份无关的工程底线、Root Continuity、授权 / 安全 / 诚实报告、Content And Tone Floor、public artifact 语义 |
-| `$CODEX_HOME/config.toml` 托管键 | 必须写入 | `model_instructions_file`、模型、推理、catalog、并发与具名 feature |
+| `$CODEX_HOME/config.toml` 托管键 | 必须写入 | `model_instructions_file`、`model_catalog_json`、并发与具名 feature。不写根模型 / 推理 / 上下文。`model_context_window` 不托管；协助 AI 建议用户删除已有的该项 |
 | `templates/AGENTS.md` → 用户全局 `AGENTS.md` | 安装器仅当目标不存在时写入；已有则不覆盖。协助 AI 以模板为骨架并入用户条款，主要冲突先问 | 本地优先级、ownership、验证、工具路由、协作/验证边界 |
-| `agents/` 与 `codex-parallel-collab` | 覆盖 / 链接 | 角色行为与协作工具步骤 |
+| `agents/` 与 `codex-parallel-collab` | 覆盖 / 复制 | 角色行为与协作工具步骤 |
 | 项目 `AGENTS.md` | 不碰 | 仓库局部规则 |
 
 ## 优先级

@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
-import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, rename, rm, symlink, writeFile } from "node:fs/promises";
+import { lstat, mkdir, mkdtemp, readFile, readdir, readlink, realpath, rename, rm, symlink, writeFile } from "node:fs/promises";
 import { cp } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
@@ -35,6 +35,18 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.equal(manifest.files.some((entry) => entry.repo === "AGENTS.md" || entry.repo === "templates/AGENTS.md" || entry.home === "AGENTS.md"), false);
   assert.equal(manifest.files.some((entry) => entry.repo.includes("nia")), false);
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath, "prompts/system-prompt-neutral.md");
+  assert.deepEqual(manifest.configPatch.values.map((entry) => entry.path).sort(), [
+    "agents.max_concurrent_threads_per_session",
+    "features.multi_agent_v2.multi_agent_mode_hint_text",
+    "model_catalog_json",
+    "model_instructions_file"
+  ]);
+  assert.deepEqual([...manifest.configPatch.absent].sort(), [
+    "default_mode_request_user_input",
+    "features.js_repl",
+    "stream_idle_timeout_ms"
+  ]);
+  assert.equal(manifest.configPatch.absent.includes("model_context_window"), false);
   assert.doesNotMatch(prompt, /\bNia\b|妮娅|本宝宝|杂鱼大叔/);
   assert.match(prompt, /Content And Tone Floor/);
   assert.doesNotMatch(prompt, /without asking whether to commit|should I commit/);
@@ -70,7 +82,16 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   const readme = await readFile(path.join(projectRoot, "README.md"), "utf8");
   assert.doesNotMatch(readme, /critic\.toml|worker-lite|codex-agent-profile/);
   assert.match(readme, /模板为骨架/);
+  assert.match(readme, /必须整份覆盖/);
+  assert.match(readme, /sol 300k/);
+  assert.match(readme, /建议用户删掉/);
+  assert.match(readme, /model_context_window/);
+  assert.match(readme, /status.*diff.*push.*pull/s);
+  assert.match(readme, /逐文件复制/);
   assert.doesNotMatch(readme, /Join-Path \$HOME "\.codex"/);
+  const layers = await readFile(path.join(projectRoot, "docs", "instruction-layers.md"), "utf8");
+  assert.doesNotMatch(layers, /model_instructions_file`、模型、推理/);
+  assert.match(layers, /不写根模型/);
   const mergeDoc = await readFile(path.join(projectRoot, "docs", "agents-merge.md"), "utf8");
   assert.match(mergeDoc, /以模板为骨架/);
   assert.match(mergeDoc, /主要冲突/);
@@ -214,10 +235,10 @@ test("managed TOML integers accept only separators between digits", async () => 
   await initialize(item);
   await planApply(item);
   const config = path.join(item.home, "config.toml");
-  await writeFile(config, (await readFile(config, "utf8")).replace("model_auto_compact_token_limit = 270000", "model_auto_compact_token_limit = 270_"));
+  await writeFile(config, (await readFile(config, "utf8")).replace("max_concurrent_threads_per_session = 15", "max_concurrent_threads_per_session = 15_"));
   const doctor = run(item, ["portable", "doctor"]);
   assert.notEqual(doctor.status, 0);
-  assert.match(doctor.stderr, /invalid managed scalar model_auto_compact_token_limit|managed value is not a supported scalar/);
+  assert.match(doctor.stderr, /invalid managed scalar agents\.max_concurrent_threads_per_session|managed value is not a supported scalar/);
 });
 
 test("portable core overwrites the root prompt and config.toml but does not replace an existing AGENTS.md", async () => {
@@ -255,16 +276,17 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   await planApply(item);
   const ownershipMarker = JSON.parse(await readFile(path.join(item.home, ".nb-codex-managed.json"), "utf8"));
   assert.equal(ownershipMarker.product, "nb-codex");
-  assert.equal(ownershipMarker.managedFiles.length, 11);
+  assert.equal(ownershipMarker.managedFiles.length, 16);
   assert.equal(ownershipMarker.managedFiles.includes("AGENTS.md"), false);
   assert.equal(ownershipMarker.managedFiles.includes("config.toml"), true);
   assert.equal(ownershipMarker.managedFiles.includes("agents/critic.toml"), false);
-  assert.deepEqual(ownershipMarker.managedLinks.map((entry) => entry.relative).sort(), [
-    "skills/codex-parallel-collab"
-  ]);
+  assert.deepEqual(ownershipMarker.managedLinks, []);
   const installed = await readFile(path.join(item.home, "config.toml"), "utf8");
   assert.ok(installed.includes(opaque), "independent byte oracle: every unrelated original config byte remains contiguous and unchanged");
   assert.match(installed, /model_instructions_file = ".*prompts\/system-prompt-neutral\.md"/);
+  assert.doesNotMatch(installed, /^model\s*=\s*"gpt-5\.6-sol"/m);
+  assert.doesNotMatch(installed, /^model_reasoning_effort\s*=/m);
+  assert.doesNotMatch(installed, /^model_context_window\s*=/m);
   assert.equal(await readFile(path.join(item.home, "AGENTS.md"), "utf8"), "# user-owned agents file\n");
   assert.equal(await readFile(path.join(item.home, "agents", "custom.toml"), "utf8"), "name = \"custom\"\n");
   for (const name of ["executor", "explore", "frontend", "implement", "research", "reviewer", "think"]) {
@@ -273,7 +295,12 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   }
   for (const relative of [
     "models.json",
-    "prompts/subagent-model-instructions.md", "prompts/system-prompt-neutral.md"
+    "prompts/subagent-model-instructions.md", "prompts/system-prompt-neutral.md",
+    "skills/codex-parallel-collab/SKILL.md",
+    "skills/codex-parallel-collab/LICENSE",
+    "skills/codex-parallel-collab/references/subtask-contract.md",
+    "skills/codex-parallel-collab/references/dispatch-examples.md",
+    "skills/codex-parallel-collab/agents/openai.yaml"
   ]) {
     assert.deepEqual(
       await readFile(path.join(item.home, ...relative.split("/"))),
@@ -284,7 +311,7 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   await missing(path.join(item.home, "prompts", "system-prompt-nia.md"));
   await missing(path.join(item.home, "policies", "collaboration.md"));
   await missing(path.join(item.home, "skills", "codex-agent-profile"));
-  assert.equal((await lstat(path.join(item.home, "skills", "codex-parallel-collab"))).isSymbolicLink(), true);
+  assert.equal((await lstat(path.join(item.home, "skills", "codex-parallel-collab"))).isSymbolicLink(), false);
   assert.match(okay(run(item, ["portable", "doctor"]), "portable doctor"), /portable doctor: ok/);
   assert.match(okay(run(item, ["portable", "status"]), "portable status"), /portable status: ok/);
 });
@@ -360,7 +387,7 @@ test("target drift and rollback drift are refused without overwriting concurrent
   assert.equal(await readFile(path.join(rollback.home, "models.json"), "utf8"), "concurrent-rollback-drift\n");
 });
 
-test("repository move reports dangling links and the bounded repair sequence restores them", async () => {
+test("repository move keeps copied skills and refreshes the ownership marker with plan/apply", async () => {
   const item = await fixture("repository-move");
   await initialize(item);
   await planApply(item);
@@ -371,14 +398,13 @@ test("repository move reports dangling links and the bounded repair sequence res
   item.script = path.join(movedBase, "scripts", "sync-codex.mjs");
   const diagnosed = run(item, ["portable", "status"]);
   assert.notEqual(diagnosed.status, 0);
-  assert.match(diagnosed.stderr, /managed link is dangling/);
-  const repaired = okay(run(item, ["portable", "repair-links"]), "portable repair-links");
-  assert.match(repaired, /removed 1 stale core links/);
+  assert.match(diagnosed.stderr, /portable repository moved/);
   okay(run(item, ["portable", "plan"]), "post-move plan");
   okay(run(item, ["portable", "apply"]), "post-move apply");
   assert.match(okay(run(item, ["portable", "doctor"]), "post-move doctor"), /portable doctor: ok/);
   const marker = JSON.parse(await readFile(path.join(item.home, ".nb-codex-managed.json"), "utf8"));
   assert.equal(marker.sourceRepository, movedBase.replaceAll("\\", "/"));
+  assert.equal((await lstat(path.join(item.home, "skills", "codex-parallel-collab"))).isSymbolicLink(), false);
 });
 
 test("portable config replace performs a real just-before-rename observation check", async () => {
@@ -386,7 +412,7 @@ test("portable config replace performs a real just-before-rename observation che
   await initialize(item);
   await planApply(item);
   const configPath = path.join(item.home, "config.toml");
-  const driftedManaged = (await readFile(configPath, "utf8")).replace('model = "gpt-5.6-sol"', 'model = "wrong"');
+  const driftedManaged = (await readFile(configPath, "utf8")).replace("max_concurrent_threads_per_session = 15", "max_concurrent_threads_per_session = 14");
   await writeFile(configPath, driftedManaged);
   okay(run(item, ["portable", "plan", "--replace-managed"]), "concurrent plan");
   const marker = path.join(item.root, "before-rename.marker");
@@ -432,18 +458,18 @@ test("doctor detects managed file, config, and link tamper", async () => {
   await initialize(configCase);
   await planApply(configCase);
   const config = path.join(configCase.home, "config.toml");
-  await writeFile(config, (await readFile(config, "utf8")).replace('model = "gpt-5.6-sol"', 'model = "wrong"'));
+  await writeFile(config, (await readFile(config, "utf8")).replace("max_concurrent_threads_per_session = 15", "max_concurrent_threads_per_session = 14"));
   assert.match(run(configCase, ["portable", "doctor"]).stderr, /config overlay drifted/);
 
   const linkCase = await fixture("doctor-link");
   await initialize(linkCase);
   await planApply(linkCase);
   const link = path.join(linkCase.home, "skills", "codex-parallel-collab");
-  await rm(link, { force: true });
+  await rm(link, { recursive: true, force: true });
   const wrong = path.join(linkCase.root, "wrong skill");
   await mkdir(wrong);
   await symlink(wrong, link, process.platform === "win32" ? "junction" : "dir");
-  assert.match(run(linkCase, ["portable", "doctor"]).stderr, /wrong source/);
+  assert.match(run(linkCase, ["portable", "doctor"]).stderr, /link, not a copy/);
 
   const markerCase = await fixture("doctor-marker");
   await initialize(markerCase);
@@ -453,6 +479,71 @@ test("doctor detects managed file, config, and link tamper", async () => {
   marker.sourceFingerprint = "0".repeat(64);
   await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
   assert.match(run(markerCase, ["portable", "doctor"]).stderr, /ownership marker is stale or modified/);
+});
+
+test("portable doctor warns about leftover retired agent files without failing", async () => {
+  const item = await fixture("leftover-retired");
+  await initialize(item);
+  await planApply(item);
+  await writeFile(path.join(item.home, "agents", "worker-lite.toml"), "name = \"worker_lite\"\n");
+  const doctor = okay(run(item, ["portable", "doctor"]), "portable doctor");
+  assert.match(doctor, /portable doctor: ok/);
+  assert.match(doctor, /leftover: agents\/worker-lite\.toml/);
+});
+
+test("an existing model_context_window is left unmanaged and is not deleted", async () => {
+  const item = await fixture("keep-context-window");
+  await writeFile(path.join(item.home, "config.toml"), "model_context_window = 128000\n");
+  await initialize(item);
+  await planApply(item);
+  const installed = await readFile(path.join(item.home, "config.toml"), "utf8");
+  assert.match(installed, /^model_context_window = 128000$/m);
+  assert.match(okay(run(item, ["portable", "doctor"]), "portable doctor"), /portable doctor: ok/);
+});
+
+test("leftover skill junction requires --replace-managed and is replaced with a copy", async () => {
+  const item = await fixture("skill-copy-upgrade");
+  await initialize(item);
+  await planApply(item);
+  const skill = path.join(item.home, "skills", "codex-parallel-collab");
+  await rm(skill, { recursive: true, force: true });
+  await symlink(
+    path.join(item.baseDir, "skills", "codex-parallel-collab"),
+    skill,
+    process.platform === "win32" ? "junction" : "dir"
+  );
+  const refused = run(item, ["portable", "plan"]);
+  assert.notEqual(refused.status, 0);
+  assert.match(refused.stderr, /still a link/);
+  okay(run(item, ["portable", "plan", "--replace-managed"]), "upgrade plan");
+  okay(run(item, ["portable", "apply", "--replace-managed"]), "upgrade apply");
+  assert.equal((await lstat(skill)).isSymbolicLink(), false);
+  assert.deepEqual(
+    await readFile(path.join(skill, "SKILL.md")),
+    await readFile(path.join(item.baseDir, "skills", "codex-parallel-collab", "SKILL.md"))
+  );
+  assert.match(okay(run(item, ["portable", "doctor"]), "upgrade doctor"), /portable doctor: ok/);
+});
+
+test("repair-links still unlinks leftover core skill junctions recorded by an old marker", async () => {
+  const item = await fixture("repair-old-skill-link");
+  await initialize(item);
+  await planApply(item);
+  const skill = path.join(item.home, "skills", "codex-parallel-collab");
+  await rm(skill, { recursive: true, force: true });
+  const source = path.join(item.baseDir, "skills", "codex-parallel-collab");
+  await symlink(source, skill, process.platform === "win32" ? "junction" : "dir");
+  const markerPath = path.join(item.home, ".nb-codex-managed.json");
+  const marker = JSON.parse(await readFile(markerPath, "utf8"));
+  marker.managedLinks = [{
+    relative: "skills/codex-parallel-collab",
+    owner: "nb-codex",
+    sourceRealpath: (await realpath(source)).replaceAll("\\", "/")
+  }];
+  await writeFile(markerPath, `${JSON.stringify(marker, null, 2)}\n`);
+  const repaired = okay(run(item, ["portable", "repair-links"]), "portable repair-links");
+  assert.match(repaired, /removed 1 stale core links/);
+  await missing(skill);
 });
 
 test("portable installer rejects unknown arguments", async () => {
