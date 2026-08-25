@@ -44,7 +44,8 @@
 | 子 TOML `developer_instructions` | 只写改变**这个孩子**运行时决策的内容：自身合同与边界。仅当 `multi_agent=true` 且内置类型在运行时仍可选时，才在 allowlist 补集里点名易混淆的内置邻居。不写改名前身、选型理由、或「你不是内置 `worker`」。选型理由放 TOML `description` 或全局 AGENTS。 |
 | 全局 AGENTS（`templates/AGENTS.md`） | root 平面上拓扑与内置禁令的唯一规范性 owner。装进用户 home 后按用户全局文件口吻写，不自称安装器。 |
 | 子代理公共基线（`prompts/subagent-model-instructions.md`） | 子平面唯一的第二 owner：leaf 纪律与（因孩子未必读到全局 AGENTS 而需要的）内置类型禁令。不写作者工作区的 task 产品名、已退役角色名或 feature-flag 旁白。 |
-| README | 读者要行动、恢复、以及冲突时要问的事实。作者 home 迁移放到协助文档的**可观测条件句**（「若这些文件已存在，则删除」），不写进默认安装步骤。 |
-| 协助 AI 文档（本文与 `agents-merge.md`） | 可以提及旧文件名，但必须包在以可观测状态为键的条件句里。 |
+| README | 人类用户：这是什么、复制一句话让智能体安装。不写安装器命令、overlay 键名或协助 AI 问卷。 |
+| `docs/install-for-ai.md` | 协助 AI 的安装协议：选定绝对 CODEX_HOME、`--home`、有冲突再问没冲突就装、models.json 必须整份覆盖、根会话不写模型/推理档位/上下文、建议删掉已有 `model_context_window`、安装命令、覆盖表、校验表。作者 home 迁移放到**可观测条件句**（「若这些文件已存在，则删除」），不写进默认安装步骤。 |
+| 协助 AI 文档（`install-for-ai.md` 与 `agents-merge.md`） | 可以提及旧文件名，但必须包在以可观测状态为键的条件句里。 |
 
 文件存在或字节相等不证明语义或模型行为改善。

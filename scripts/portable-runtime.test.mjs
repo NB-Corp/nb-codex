@@ -74,6 +74,7 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   const genealogy = /妮娅|\bNia\b|\bnia\b|ProductStewardship|去掉.{0,20}人格|发布切片|科学角色|产品反馈投影|nia 工程|Assay Task/;
   const recipientDocs = [
     "README.md",
+    "docs/install-for-ai.md",
     path.join("docs", "agents-merge.md"),
     path.join("docs", "instruction-layers.md"),
     path.join("templates", "AGENTS.md"),
@@ -85,17 +86,25 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
     assert.doesNotMatch(text, genealogy, relative);
   }
   const readme = await readFile(path.join(projectRoot, "README.md"), "utf8");
+  const installAi = await readFile(path.join(projectRoot, "docs", "install-for-ai.md"), "utf8");
   assert.doesNotMatch(readme, /critic\.toml|worker-lite|codex-agent-profile/);
-  assert.match(readme, /模板为骨架/);
-  assert.match(readme, /必须整份覆盖/);
-  assert.match(readme, /sol 300k/);
-  assert.match(readme, /建议用户删掉/);
-  assert.match(readme, /model_context_window/);
-  assert.match(readme, /status.*diff.*push.*pull/s);
-  assert.match(readme, /逐文件复制/);
-  assert.match(readme, /有冲突再问/);
-  assert.doesNotMatch(readme, /先问后装/);
-  assert.doesNotMatch(readme, /Join-Path \$HOME "\.codex"/);
+  assert.match(readme, /帮我安装 https:\/\/github.com\/NB-Corp\/nb-codex\/tree\/with_grok/);
+  assert.match(readme, /docs\/install-for-ai\.md/);
+  assert.doesNotMatch(readme, /逐文件复制|必须整份覆盖|先问后装|模板为骨架/);
+  assert.doesNotMatch(installAi, /critic\.toml|worker-lite|codex-agent-profile/);
+  assert.match(installAi, /模板为骨架/);
+  assert.match(installAi, /必须整份覆盖/);
+  assert.match(installAi, /sol 300k/);
+  assert.match(installAi, /建议用户删掉/);
+  assert.match(installAi, /model_context_window/);
+  assert.match(installAi, /status.*diff.*push.*pull/s);
+  assert.match(installAi, /逐文件复制/);
+  assert.match(installAi, /有冲突再问/);
+  assert.match(installAi, /先 clone 用户给出的 GitHub URL/);
+  assert.match(installAi, /git clone -b <branch>/);
+  assert.match(installAi, /不是 clone 路径/);
+  assert.doesNotMatch(installAi, /先问后装/);
+  assert.doesNotMatch(installAi, /Join-Path \$HOME "\.codex"/);
   const layers = await readFile(path.join(projectRoot, "docs", "instruction-layers.md"), "utf8");
   assert.doesNotMatch(layers, /model_instructions_file`、模型、推理/);
   assert.match(layers, /不写根模型/);
