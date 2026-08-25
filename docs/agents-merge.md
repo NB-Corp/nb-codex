@@ -15,7 +15,7 @@
 1. 通读现有 `$CODEX_HOME/AGENTS.md`。
 2. 以 [`templates/AGENTS.md`](../templates/AGENTS.md) 为唯一骨架：节名、七角色拓扑、内置 `default` / `explorer` / `worker` 禁令、验证三类、四项阻塞、工具路由、协作 / 验证边界、root 版本管理默认，都用模板正文。
 3. 把用户文件里不与上列内核冲突的条款搬进对应节。例如：额外角色写进「常驻协作内核」并标明例外；MCP / UI 偏好写进工具路由；不与「root 直接本地 commit」冲突的仓库习惯写进「技能、语义资产与项目默认值」。同义的边界展开丢掉用户那份，保留模板节。
-4. 主要冲突会改变 root 决策，先一次列给用户裁决，得到回答前不要写文件、不要猜。典型：用户坚持内置 `default` / `explorer` / `worker` 当 fallback；验证生命周期与 Work / Candidate Verdict / External-or-Irreversible 不相容；用户要求独立 `policies/` 文件作权威；用户禁止本地 commit 或要求每次询问提交；用户角色与本包七角色同名但职责相反。措辞或顺序的次要差异直接用模板。
+4. 主要冲突会改变 root 决策，先一次列给用户裁决，得到回答前不要写文件、不要猜。没读到冲突就不要先做问卷。问的时候用白话一次说清差在哪、选哪边。典型：用户坚持内置 `default` / `explorer` / `worker` 当 fallback；验证生命周期与 Work / Candidate Verdict / External-or-Irreversible 不相容；用户要求独立 `policies/` 文件作权威；用户禁止本地 commit 或要求每次询问提交；用户角色与本包七角色同名但职责相反。措辞或顺序的次要差异直接用模板。
 5. 裁决之后写出完整合并稿（模板骨架 + 已并入的用户条款）写入 `$CODEX_HOME/AGENTS.md`。还有未决的主要冲突就停：不改用户文件，只在对话里列冲突。
 
 ## 从更早布局升级
@@ -24,7 +24,12 @@
 
 - `agents/critic.toml`
 - `agents/check.toml`
+- `agents/executor.toml`
+- `agents/review_gpt.toml`
+- `agents/review_grok.toml`
 - `agents/worker-lite.toml`
 - `agents/worker.toml`
+- `agents/worker_gpt.toml`
+- `agents/worker_grok.toml`
 - `policies/*.md`
 - `skills/codex-agent-profile/`

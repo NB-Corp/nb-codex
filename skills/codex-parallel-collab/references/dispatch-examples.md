@@ -21,19 +21,18 @@ code-writing ownership of the critical path.
 ## Disjoint implementation DAG
 
 ```text
-api_contract  implement  writes src/api/**       depends none
-ui_consumer   implement  writes src/ui/**        depends api_contract receipt
-docs          implement  writes docs/feature.md  depends api_contract receipt
-integrate     implement  writes shared registry depends ui_consumer, docs
-review        reviewer   writes NONE             depends integrate receipt
+api_contract  implement    writes src/api/**       depends none
+ui_consumer   frontend     writes src/ui/**        depends api_contract receipt
+docs          implement    writes docs/feature.md  depends api_contract receipt
+integrate     implement    writes shared registry depends ui_consumer, docs
+review        reviewer     writes NONE             depends integrate receipt
 ```
 
-Only ready nodes run. If the UI and docs can consume the accepted contract
-independently, they may run together. The `integrate` owner starts after their
+The `ui_consumer` node is `frontend`. Other implementation nodes are `implement`. If the UI and docs can consume the accepted contract independently, they may run together. The `integrate` owner starts after their
 overlapping ownership ends, alone edits the shared registry, and runs directly
 affected integration proof. The root remains coordination-only through that
 receipt. The single `review` node covers the integrated coherent milestone;
-do not add a reviewer for each leaf unless the always-loaded verification kernel
+do not add a review seat for each leaf unless the always-loaded verification kernel
 admits separate review for genuinely independent risk domains.
 
 ## Broad exploration, narrow writes
@@ -59,13 +58,13 @@ the proposed frame labeled provisional, and the decision that audit may
 change. Frame audit stays on `think` with an analysis-only brief; do not invent another review seat. Adopt a supported revision,
 reject it with counterevidence, or open a user decision door.
 
-## Warm reviewer repair loop
+## Warm review repair loop
 
 `reviewer` reports `F1` against the API candidate owned by
 `api_contract`. Use `followup_task` on the original implementation owner with
 `F1`, its anchor, and the accepted contract. After its focused repair receipt,
-use `followup_task` on the same reviewer to recheck `F1`. The root does not patch
-the defect or launch a replacement reviewer for convenience. Both runtime
+use `followup_task` on the same review seat to recheck `F1`. The root does not patch
+the defect or launch a replacement review for convenience. Both runtime
 threads remain warm because the candidate, contract, and immediate repair loop
 are unchanged.
 
@@ -79,8 +78,8 @@ predecessor receipt, current diff/contracts, still-valid evidence, and exact
 remaining work. The predecessor is not marked failed, and the successor does
 not replay its successful checks.
 
-If `F1` instead returns after the reviewer thread has become context-pressured,
-spawn a reviewer successor with `F1`, the original review receipt, repair diff,
+If `F1` instead returns after the review thread has become context-pressured,
+spawn a review successor with `F1`, the original review receipt, repair diff,
 and invalidated proof. It performs a focused continuation recheck, not a new
 full review or second opinion.
 

@@ -65,6 +65,11 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   await assert.rejects(lstat(path.join(projectRoot, "agents", "check.toml")), { code: "ENOENT" });
   await assert.rejects(lstat(path.join(projectRoot, "agents", "worker.toml")), { code: "ENOENT" });
   await assert.rejects(lstat(path.join(projectRoot, "agents", "worker-lite.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "executor.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "review_gpt.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "review_grok.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "worker_gpt.toml")), { code: "ENOENT" });
+  await assert.rejects(lstat(path.join(projectRoot, "agents", "worker_grok.toml")), { code: "ENOENT" });
 
   const genealogy = /妮娅|\bNia\b|\bnia\b|ProductStewardship|去掉.{0,20}人格|发布切片|科学角色|产品反馈投影|nia 工程|Assay Task/;
   const recipientDocs = [
@@ -88,6 +93,8 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.match(readme, /model_context_window/);
   assert.match(readme, /status.*diff.*push.*pull/s);
   assert.match(readme, /逐文件复制/);
+  assert.match(readme, /有冲突再问/);
+  assert.doesNotMatch(readme, /先问后装/);
   assert.doesNotMatch(readme, /Join-Path \$HOME "\.codex"/);
   const layers = await readFile(path.join(projectRoot, "docs", "instruction-layers.md"), "utf8");
   assert.doesNotMatch(layers, /model_instructions_file`、模型、推理/);
@@ -108,8 +115,8 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
     assert.ok(match, `${file} missing developer_instructions`);
     return match[1];
   }
-  const leafRoles = ["executor.toml", "explore.toml", "research.toml", "reviewer.toml"];
-  const spawnCapableRoles = ["implement.toml", "frontend.toml", "think.toml"];
+  const leafRoles = ["explore.toml", "research.toml", "reviewer.toml", "worker_lite.toml"];
+  const spawnCapableRoles = ["think.toml", "implement.toml", "frontend.toml"];
   for (const file of leafRoles) {
     const body = developerInstructions(await readFile(path.join(projectRoot, "agents", file), "utf8"), file);
     assert.doesNotMatch(body, /built-in/, file);
@@ -289,7 +296,7 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   assert.doesNotMatch(installed, /^model_context_window\s*=/m);
   assert.equal(await readFile(path.join(item.home, "AGENTS.md"), "utf8"), "# user-owned agents file\n");
   assert.equal(await readFile(path.join(item.home, "agents", "custom.toml"), "utf8"), "name = \"custom\"\n");
-  for (const name of ["executor", "explore", "frontend", "implement", "research", "reviewer", "think"]) {
+  for (const name of ["explore", "frontend", "implement", "research", "reviewer", "think", "worker_lite"]) {
     const text = await readFile(path.join(item.home, "agents", `${name}.toml`), "utf8");
     assert.match(text, new RegExp(item.home.replaceAll("\\", "/").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }

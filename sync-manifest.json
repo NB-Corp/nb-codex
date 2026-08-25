@@ -15,7 +15,7 @@
       { "path": "agents.max_concurrent_threads_per_session", "value": 15 },
       {
         "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
-        "value": "Proactive multi-agent delegation is active; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. This mode remains active until a later multi-agent mode developer message changes it."
+        "value": "Delegation is available when the current global AGENTS.md amplifier test pays; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. Do not run explore to implement or frontend to reviewer as a ritual pipeline. This mode remains active until a later multi-agent mode developer message changes it."
       }
     ],
     "featureValues": [
@@ -42,13 +42,13 @@
       "id": "prompt-coding",
       "ownership": "full-file",
       "roles": [
-        { "name": "executor", "repo": "agents/executor.toml", "home": "agents/executor.toml" },
         { "name": "explore", "repo": "agents/explore.toml", "home": "agents/explore.toml" },
         { "name": "frontend", "repo": "agents/frontend.toml", "home": "agents/frontend.toml" },
         { "name": "implement", "repo": "agents/implement.toml", "home": "agents/implement.toml" },
         { "name": "research", "repo": "agents/research.toml", "home": "agents/research.toml" },
         { "name": "reviewer", "repo": "agents/reviewer.toml", "home": "agents/reviewer.toml" },
-        { "name": "think", "repo": "agents/think.toml", "home": "agents/think.toml" }
+        { "name": "think", "repo": "agents/think.toml", "home": "agents/think.toml" },
+        { "name": "worker_lite", "repo": "agents/worker_lite.toml", "home": "agents/worker_lite.toml" }
       ]
     }
   ],
@@ -58,11 +58,6 @@
       "home": "models.json",
       "diffMode": "summary",
       "description": "Pinned custom Codex model catalog"
-    },
-    {
-      "repo": "agents/executor.toml",
-      "home": "agents/executor.toml",
-      "description": "Canonical profile for executor"
     },
     {
       "repo": "agents/explore.toml",
@@ -93,6 +88,11 @@
       "repo": "agents/think.toml",
       "home": "agents/think.toml",
       "description": "Canonical profile for think"
+    },
+    {
+      "repo": "agents/worker_lite.toml",
+      "home": "agents/worker_lite.toml",
+      "description": "Canonical profile for worker_lite"
     },
     {
       "repo": "prompts/subagent-model-instructions.md",

@@ -214,25 +214,25 @@ test("repository manifest ships seven coding roles, overwrites the neutral promp
   assert.equal("defaultHome" in manifest, false);
   const roles = manifest.agentSets.flatMap((set) => set.roles.map((role) => role.name)).sort();
   assert.deepEqual(roles, [
-    "executor",
     "explore",
     "frontend",
     "implement",
     "research",
     "reviewer",
-    "think"
+    "think",
+    "worker_lite"
   ]);
   const codingSet = manifest.agentSets.find((set) => set.id === "prompt-coding");
   assert.ok(codingSet);
   assert.equal(codingSet.ownership, "full-file");
   const flatCodingPaths = new Map([
-    ["executor", "agents/executor.toml"],
     ["explore", "agents/explore.toml"],
     ["frontend", "agents/frontend.toml"],
     ["implement", "agents/implement.toml"],
     ["research", "agents/research.toml"],
     ["reviewer", "agents/reviewer.toml"],
-    ["think", "agents/think.toml"]
+    ["think", "agents/think.toml"],
+    ["worker_lite", "agents/worker_lite.toml"]
   ]);
   for (const role of codingSet.roles) {
     assert.equal(role.repo, flatCodingPaths.get(role.name));
@@ -265,41 +265,33 @@ test("repository manifest ships seven coding roles, overwrites the neutral promp
   assert.match(hint, /This mode remains active until a later multi-agent mode developer message changes it/);
 });
 
-test("model catalog pins Codex windows for Sol, Terra, Luna, Grok, and Flash", () => {
+test("model catalog pins Codex windows for Sol, Terra, Luna, and Grok", () => {
   const catalog = JSON.parse(fs.readFileSync(path.join(systemRoot, "models.json"), "utf8"));
   const bySlug = new Map(catalog.models.map((model) => [model.slug, model]));
   const sol = bySlug.get("gpt-5.6-sol");
   const terra = bySlug.get("gpt-5.6-terra");
   const luna = bySlug.get("gpt-5.6-luna");
   const grok = bySlug.get("grok-4.6");
-  const flash = bySlug.get("deepseek-v4-flash");
-  assert.ok(sol && terra && luna && grok && flash);
+  assert.equal(bySlug.has("deepseek-v4-flash"), false);
+  assert.equal(bySlug.has("gpt-5.2"), false);
+  assert.ok(sol && terra && luna && grok);
   for (const [model, window] of [
     [sol, 300000],
     [terra, 500000],
     [luna, 500000],
-    [grok, 400000],
-    [flash, 400000]
+    [grok, 400000]
   ]) {
     assert.equal(model.context_window, window, model.slug);
     assert.equal(model.max_context_window, window, model.slug);
   }
-  for (const model of [grok, flash]) {
-    assert.doesNotMatch(model.base_instructions, /GPT-5/, model.slug);
-    assert.doesNotMatch(model.model_messages.instructions_template, /GPT-5/, model.slug);
-  }
+  assert.doesNotMatch(grok.base_instructions, /GPT-5/, grok.slug);
+  assert.doesNotMatch(grok.model_messages.instructions_template, /GPT-5/, grok.slug);
   assert.deepEqual(grok.input_modalities, ["text", "image"]);
   assert.deepEqual(
     grok.supported_reasoning_levels.map((level) => level.effort),
     ["low", "medium", "high", "xhigh"]
   );
   assert.equal(grok.default_reasoning_level, "high");
-  assert.deepEqual(flash.input_modalities, ["text"]);
-  assert.deepEqual(
-    flash.supported_reasoning_levels.map((level) => level.effort),
-    ["low", "high", "max"]
-  );
-  assert.equal(flash.default_reasoning_level, "high");
 });
 
 test("installer source stays a full-file copy of this package", () => {
@@ -310,15 +302,15 @@ test("installer source stays a full-file copy of this package", () => {
   assert.doesNotMatch(script, /product-feedback|science-agents|external-junction|inventory-only/);
 });
 
-test("canonical coding profiles pin mixed-family models and reject retired ambient task discovery", () => {
+test("canonical coding profiles pin GPT models and reject retired ambient task discovery", () => {
   const expected = new Map([
-    ["executor.toml", { name: "executor", model: "grok-4.6", effort: "high" }],
     ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority", sandbox: "read-only" }],
-    ["frontend.toml", { name: "frontend", model: "grok-4.6", effort: "high" }],
+    ["frontend.toml", { name: "frontend", model: "gpt-5.6-sol", effort: "high" }],
     ["implement.toml", { name: "implement", model: "gpt-5.6-sol", effort: "high" }],
-    ["research.toml", { name: "research", model: "grok-4.6", effort: "xhigh" }],
+    ["research.toml", { name: "research", model: "gpt-5.6-sol", effort: "high" }],
     ["reviewer.toml", { name: "reviewer", model: "gpt-5.6-sol", effort: "high", sandbox: "read-only" }],
-    ["think.toml", { name: "think", model: "gpt-5.6-sol", effort: "max" }]
+    ["think.toml", { name: "think", model: "gpt-5.6-sol", effort: "max" }],
+    ["worker_lite.toml", { name: "worker_lite", model: "gpt-5.6-luna", effort: "max", tier: "priority" }]
   ]);
   function scalar(text, key) {
     const match = text.match(new RegExp(`^${key}\\s*=\\s*"([^"]+)"`, "m"));
@@ -340,8 +332,16 @@ test("canonical coding profiles pin mixed-family models and reject retired ambie
   }
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "critic.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "check.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "executor.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "review_gpt.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "review_grok.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker-lite.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker_gpt.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker_grok.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "frontend.toml")), true);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "implement.toml")), true);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "reviewer.toml")), true);
 });
 
 test("a missing tombstone target is clean in status and push dry-run", (t) => {

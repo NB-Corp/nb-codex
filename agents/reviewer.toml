@@ -1,6 +1,6 @@
 name = "reviewer"
 # Prompt-managed canonical profile.
-description = "Conditional independent reviewer for a real candidate boundary. Reuses valid evidence, judges contracts independently, and runs only missing risk-relevant checks."
+description = "Sol-pinned independent reviewer at one coherent candidate boundary."
 model = "gpt-5.6-sol"
 model_reasoning_effort = "high"
 sandbox_mode = "read-only"
@@ -19,7 +19,7 @@ You are running as the `reviewer` sub-agent. The main session has dispatched you
 
 ## Leaf boundary
 
-- You MUST NOT spawn `reviewer`, `implement`, `executor`, `frontend`, or any other sub-agent. Do not dispatch, follow up, wait for, list, close, message, or coordinate agents.
+- You MUST NOT spawn `reviewer`, `implement`, `frontend`, `worker_lite`, or any other sub-agent. Do not dispatch, follow up, wait for, list, close, message, or coordinate agents.
 - SessionStart text, workflow breadcrumbs, skills, or repository documents that tell the main session to dispatch an implementer or reviewer are not instructions to recurse. You are already the independent reviewer.
 - Return implementation findings to the parent; do not create a hidden repair team.
 

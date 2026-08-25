@@ -37,15 +37,15 @@ Acceptance: <observable closure for this finding>
 Receipt: <follow the common AGENTS contract and key it to this finding ID>
 ```
 
-Repeat the packet fields per accepted finding. The finding prose is parent-internal evidence, not reader-facing replacement copy. The executor repairs only the accepted findings and runs invalidated evidence. Root does not patch the candidate in parallel.
+Repeat the packet fields per accepted finding. The finding prose is parent-internal evidence, not reader-facing replacement copy. The implementation owner repairs only the accepted findings and runs invalidated evidence. Root does not patch the candidate in parallel.
 
 ## Focused Recheck Packet
 
-Return the repair receipt to the reviewer lineage:
+Return the repair receipt to the review lineage:
 
 ```text
 Candidate: <exact repaired diff or artifact>
-Original review reference: <reviewer-lineage evidence retained by path or message identity>
+Original review reference: <review-lineage evidence retained by path or message identity>
 Finding IDs to recheck: <the same stable IDs only>
 Repair diff: <exact paths/changes>
 Evidence: <producer, inputs, independent oracle, outcome, claim limits>
@@ -54,7 +54,7 @@ Unchanged findings: <explicitly out of scope>
 Report: <closed/open per ID, new material regression only if directly caused>
 ```
 
-The recheck closes the named findings; it does not restart a full review or solicit a second opinion. Reuse a warm thread only for the immediate loop; otherwise use the successor packet with the same reviewer lineage.
+The recheck closes the named findings; it does not restart a full review or solicit a second opinion. Reuse a warm thread only for the immediate loop; otherwise use the successor packet with the same review lineage.
 
 ## Evidence Receipt Fields
 

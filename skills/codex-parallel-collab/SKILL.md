@@ -1,6 +1,6 @@
 ---
 name: codex-parallel-collab
-description: Coordinate nb-codex subagents with named role ownership, proactive capability-aware delegation, integration ownership, wait-state discipline, and reviewer repair loops. Use when the user asks for parallel agents, multi-agent collaboration, delegated implementation, or an ownership DAG, or when substantial work benefits from a coherent delegated owner, parallel leaves, context isolation, specialization, or independent evidence. Do not use for a small edit merely because it touches several files.
+description: Coordinate nb-codex subagents with named role ownership, proactive capability-aware delegation, integration ownership, wait-state discipline, and review repair loops. Use when the user asks for parallel agents, multi-agent collaboration, delegated implementation, or an ownership DAG, or when substantial work benefits from a coherent delegated owner, parallel leaves, context isolation, specialization, or independent evidence. Do not use for a small edit merely because it touches several files.
 metadata:
   short-description: Coordinate named nb-codex owners without shadow work
 ---
@@ -9,17 +9,19 @@ metadata:
 
 这是 nb-codex 的协作**方法与工具**。治理以全局 `AGENTS.md` 为准；本 skill 不改写拓扑、验证内核或边界协议。工具名按 Codex 硬编码：`spawn_agent`、`wait_agent`、`followup_task`、`send_message`、`list_agents`、`interrupt_agent`。
 
-维护角色（不要用内置 `default` / `explorer` / `worker`）：
+维护角色（不要用内置 `default` / `explorer` / `worker`）。派发前过 AGENTS 放大器门：说得出收益才派，否则 root 自己做。不要把 `explore`→`implement`/`frontend`→`reviewer` 跑成例行流水线。
 
-| Need | Role | Model pin | Topology |
-| --- | --- | --- | --- |
-| 不熟悉代码的只读地图 | `explore` | luna + priority | leaf |
-| 范围清楚的快速执行 | `executor` | grok-4.6 | leaf |
-| 复杂 / 契约重实现 | `implement` | gpt-5.6-sol | 可租 `explore` |
-| UI 审美切片 | `frontend` | grok-4.6 | 可租 `explore` |
-| 难架构 / 根因 / 精细改动 | `think` | gpt-5.6-sol | 可租 `explore` / `research` / `executor` |
-| 检索与综合 | `research` | grok-4.6 | leaf |
-| 独立 candidate 判断 | `reviewer` | gpt-5.6-sol | leaf |
+| Need | Role | Topology |
+| --- | --- | --- |
+| 不熟悉代码的只读地图 | `explore` | leaf |
+| 范围清楚的快速执行 | `worker_lite` | leaf |
+| 实现一个连贯切片 | `implement` | 可租 `explore` |
+| UI 切片 | `frontend` | 可租 `explore` |
+| 难架构 / 根因 / 精细改动 | `think` | 可租 `explore` / `research` / `worker_lite` |
+| 一块会改决策的复杂调研 | `research` | leaf |
+| 独立 candidate 判断 | `reviewer` | leaf |
+
+lookup 用搜索工具，不要派 `research`。代码地图用 `explore`。`research` 贵，只接会改决策的问题块。UI 派 `frontend`。
 
 能力、sandbox、子角色 allowlist 以 `$CODEX_HOME/agents/<role>.toml` 为准。
 
@@ -36,6 +38,8 @@ ui_consumer       frontend    src/ui/**          api_contract        consumer sc
 integration       implement   shared registry    api, ui receipts    affected integration proof
 ```
 
+`ui_consumer` 必须是 `frontend`。非 UI 实现节点派 `implement`。
+
 节点是可独立验证的职责，不是文件。共享源和 integration owner 要标明。只有写入不相交的 ready 节点才一起跑。能由一个有能力的 owner 做完的连贯竖切，不要拆。
 
 ## 2. Dispatch
@@ -45,7 +49,7 @@ integration       implement   shared registry    api, ui receipts    affected in
 ```text
 Purpose: <one bounded outcome>
 Depends on: <accepted inputs/receipts or none>
-Owner: <explore|executor|implement|frontend|think|research|reviewer>
+Owner: <explore|worker_lite|implement|frontend|think|research|reviewer>
 Edit allowlist: <soft behavioral paths or NONE>
 Read / write / forbidden scope: <clear boundaries>
 Inputs and decisions: <only current authoritative context>
@@ -94,7 +98,7 @@ DAG 汇合时，把已接受的 leaf receipt、当前共享文件 diff、生成�
 
 ## 5. Admit Review Only When It Can Change The Verdict
 
-套用 AGENTS 里的 `reviewer` 准入。获准后只送一个中立连贯 candidate：目标/合约、精确最终 diff 或 artifact、带独立 oracle 出处的既有证据、残余缺口、findings-first 报告合同。不要编码期望 verdict。
+套用 AGENTS 里的 review 准入。获准后只送一个中立连贯 candidate：目标/合约、精确最终 diff 或 artifact、带独立 oracle 出处的既有证据、残余缺口、findings-first 报告合同。不要编码期望 verdict。审查席是 `reviewer`。
 
 把已接受的稳定 finding ID 连同治理锚点、决策相关证据、须保留的任务事实、证明状态和验收，路由回实现 owner 谱系。Finding 正文不是面向读者的替换文案。立即 repair/recheck 循环走 AGENTS「协作边界」和下面的扩展 packet。不要在 root 侧做语义修复，也不要再开一轮全面 review。
 
@@ -103,7 +107,7 @@ DAG 汇合时，把已接受的 leaf receipt、当前共享文件 diff、生成�
 只在这些情况下读 [`references/subtask-contract.md`](references/subtask-contract.md)：
 
 - 过期 runtime lease 与同角色 successor packet；或
-- reviewer finding 修复 / 定向复检 packet。
+- review finding 修复 / 定向复检 packet。
 
 多角色 DAG、共享文件集成或工具级等待/修复顺序仍不清楚时，读 [`references/dispatch-examples.md`](references/dispatch-examples.md)。这些是例子和 packet，不是治理权威。
 

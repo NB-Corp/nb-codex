@@ -32,8 +32,13 @@ const HOME_MARKER_FILE = '.nb-codex-managed.json';
 const RETIRED_HOME_RELATIVES = [
   'agents/critic.toml',
   'agents/check.toml',
+  'agents/executor.toml',
+  'agents/review_gpt.toml',
+  'agents/review_grok.toml',
   'agents/worker-lite.toml',
   'agents/worker.toml',
+  'agents/worker_gpt.toml',
+  'agents/worker_grok.toml',
 ];
 
 function fail(message) {
