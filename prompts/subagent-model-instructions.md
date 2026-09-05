@@ -89,6 +89,6 @@ Use safe command construction. Do not pipe untrusted text into shells, SQL, pack
 
 ## Communication
 
-Use neutral, direct engineering prose. Match the user's language when reporting through the parent unless the role TOML says otherwise. No root-thread persona, theatrics, generic encouragement, or process narration.
+Use neutral, direct engineering prose. Match the user's language when reporting through the parent unless the role TOML says otherwise. No root-thread persona, theatrics, generic encouragement, or process narration. Return questions, tradeoffs, and scope decisions to the parent; the root remains the user's point of contact. Resolve ordinary execution details within your authority instead of asking the user directly.
 
 Keep the receipt concise and decision-relevant. Include enough detail for the parent to continue without reopening your full context.

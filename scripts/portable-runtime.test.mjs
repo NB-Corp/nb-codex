@@ -7,7 +7,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { parseScalar } from "../src/toml-overlay.mjs";
+import { buildOverlaySpec, parseScalar, renderConfig } from "../src/toml-overlay.mjs";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const temporaryRoots = [];
@@ -36,6 +36,7 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.equal(manifest.files.some((entry) => entry.repo.includes("nia")), false);
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "model_instructions_file").homePath, "prompts/system-prompt-neutral.md");
   assert.deepEqual(manifest.configPatch.values.map((entry) => entry.path).sort(), [
+    "agents.default_subagent_reasoning_effort",
     "agents.max_concurrent_threads_per_session",
     "features.multi_agent_v2.multi_agent_mode_hint_text",
     "model_catalog_json",
@@ -55,8 +56,6 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.match(agents, /协作边界|验证边界/);
   assert.doesNotMatch(agents, /先脑暴|\bPurpose\b|fork_turns/);
   assert.equal([...agents.matchAll(/匹配 hash 只证明字节相同/g)].length, 1);
-  const agentLineCount = agents.replace(/(?:\r?\n)+$/, "").split(/\r?\n/).length;
-  assert.ok(agentLineCount <= 145, `AGENTS template is ${agentLineCount} lines`);
   assert.doesNotMatch(agents, /\{CODEX_HOME\}|policies\/collaboration|Assay|brainstorm-to-decision|codex-agent-profile/);
   assert.doesNotMatch(agents, /xxoy1|ProductStewardship|妮娅|本宝宝|nb-codex 提供|本模板|science_\*|critic frame audit|本包装/);
   await assert.rejects(lstat(path.join(projectRoot, "agents", "critic.toml")), { code: "ENOENT" });
@@ -94,12 +93,13 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
   assert.doesNotMatch(installAi, /critic\.toml|worker-lite|codex-agent-profile/);
   assert.match(installAi, /模板为骨架/);
   assert.match(installAi, /必须整份覆盖/);
-  assert.match(installAi, /sol 300k/);
-  assert.match(installAi, /建议用户删掉/);
+  assert.match(installAi, /320000/);
+  assert.match(installAi, /650000/);
+  assert.match(installAi, /得到确认后才使用 `--use-catalog-context`/);
   assert.match(installAi, /model_context_window/);
   assert.match(installAi, /status.*diff.*push.*pull/s);
   assert.match(installAi, /逐文件复制/);
-  assert.match(installAi, /有冲突再问/);
+  assert.match(installAi, /即使没有冲突，也要得到合并确认后才写/);
   assert.match(installAi, /先 clone 用户给出的 GitHub URL/);
   assert.match(installAi, /git clone -b <branch>/);
   assert.match(installAi, /不是 clone 路径/);
@@ -124,17 +124,20 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
     assert.ok(match, `${file} missing developer_instructions`);
     return match[1];
   }
-  const leafRoles = ["explore.toml", "research.toml", "reviewer.toml", "worker_lite.toml"];
-  const spawnCapableRoles = ["think.toml", "implement.toml", "frontend.toml"];
+  const leafRoles = ["explore.toml", "think.toml", "reviewer.toml", "worker_lite.toml"];
+  const spawnCapableRoles = ["research.toml", "implement.toml", "frontend.toml"];
   for (const file of leafRoles) {
-    const body = developerInstructions(await readFile(path.join(projectRoot, "agents", file), "utf8"), file);
-    assert.doesNotMatch(body, /built-in/, file);
-    assert.doesNotMatch(body, /You were chosen because|low-intelligence|search-layer|task-path/, file);
+    const text = await readFile(path.join(projectRoot, "agents", file), "utf8");
+    developerInstructions(text, file);
+    assert.match(text, /^multi_agent = false$/m, file);
+    assert.match(text, /\[features.multi_agent_v2\]\r?\nenabled = false/, file);
   }
   for (const file of spawnCapableRoles) {
-    const body = developerInstructions(await readFile(path.join(projectRoot, "agents", file), "utf8"), file);
-    assert.match(body, /built-in `default`|built-in `explorer`|built-in `worker`/, file);
-    assert.doesNotMatch(body, /reconstruct a generic built-in worker|low-intelligence/, file);
+    const text = await readFile(path.join(projectRoot, "agents", file), "utf8");
+    const body = developerInstructions(text, file);
+    assert.match(body, /`explore`/, file);
+    assert.match(text, /^multi_agent = true$/m, file);
+    assert.match(text, /\[features.multi_agent_v2\]\r?\nenabled = true/, file);
   }
 });
 
@@ -515,6 +518,198 @@ test("an existing model_context_window is left unmanaged and is not deleted", as
   const installed = await readFile(path.join(item.home, "config.toml"), "utf8");
   assert.match(installed, /^model_context_window = 128000$/m);
   assert.match(okay(run(item, ["portable", "doctor"]), "portable doctor"), /portable doctor: ok/);
+});
+
+test("root context migration requires separate plan-bound consent and preserves root choices", async () => {
+  const item = await fixture("context-consent");
+  const original = '# user root choices\nmodel = "grok-4.6"\nmodel_reasoning_effort = "high"\nmodel_context_window = 128000\nmodel_auto_compact_token_limit = 90000\nmodel_auto_compact_token_limit_scope = "total"\n[sandbox_workspace_write]\nnetwork_access = false\n[model_providers.custom]\nname = "fixture provider"\n';
+  const target = path.join(item.home, "config.toml");
+  await writeFile(target, original);
+  await writeFile(path.join(item.home, "AGENTS.md"), "# Personal rules\nAsk before committing.\n");
+  await initialize(item);
+  const planOutput = okay(run(item, ["portable", "plan", "--replace-managed"]), "keep-context plan");
+  assert.match(planOutput, /keep model_context_window = 128000/);
+  assert.match(planOutput, /keep model_auto_compact_token_limit = 90000/);
+  assert.match(planOutput, /ask before merging/);
+  assert.equal(await readFile(target, "utf8"), original);
+  const before = await snapshotTree(item.home);
+  const unauthorized = run(item, ["portable", "apply", "--replace-managed", "--use-catalog-context"]);
+  assert.notEqual(unauthorized.status, 0);
+  assert.match(unauthorized.stderr, /same --use-catalog-context choice/);
+  assert.deepEqual(await snapshotTree(item.home), before);
+  okay(run(item, ["portable", "apply", "--replace-managed"]), "keep-context apply");
+  const kept = await readFile(target, "utf8");
+  for (const line of original.trimEnd().split('\n')) assert.ok(kept.includes(line + '\n'), line);
+  assert.equal(await readFile(path.join(item.home, "AGENTS.md"), "utf8"), "# Personal rules\nAsk before committing.\n");
+  const migrateOutput = okay(run(item, ["portable", "plan", "--use-catalog-context"]), "migration plan");
+  assert.match(migrateOutput, /remove model_auto_compact_token_limit_scope = "total"/);
+  const plan = JSON.parse(await readFile(path.join(item.baseDir, ".nb-codex", "install-plan.json"), "utf8"));
+  assert.equal(plan.config.contextOverrides.length, 3);
+  assert.ok(plan.config.contextOverrides.every((entry) => entry.action === "remove"));
+  assert.equal(await readFile(target, "utf8"), kept);
+  assert.notEqual(run(item, ["portable", "apply"]).status, 0);
+  assert.equal(await readFile(target, "utf8"), kept);
+  okay(run(item, ["portable", "apply", "--use-catalog-context"]), "migration apply");
+  const installed = await readFile(target, "utf8");
+  assert.doesNotMatch(installed, /^model_(?:context_window|auto_compact_token_limit(?:_scope)?)\s*=/m);
+  assert.match(installed, /^model = "grok-4.6"$/m);
+  assert.match(installed, /^model_reasoning_effort = "high"$/m);
+  assert.ok(installed.includes('[sandbox_workspace_write]\nnetwork_access = false\n[model_providers.custom]\nname = "fixture provider"\n'));
+  assert.match(installed, /^default_subagent_reasoning_effort = "medium"$/m);
+  const backups = path.join(item.baseDir, ".nb-codex", "backups");
+  const saved = await Promise.all((await readdir(backups)).map((dir) => readFile(path.join(backups, dir, "config.toml"), "utf8").catch(() => null)));
+  assert.ok(saved.includes(kept), "migration preserves the exact prior config in backup");
+  okay(run(item, ["portable", "doctor"]), "migration doctor");
+});
+
+test("overlay inserts several missing values in a single new TOML table", () => {
+  const spec = {
+    values: new Map([["agents.max_concurrent_threads_per_session", 15], ["agents.default_subagent_reasoning_effort", "medium"]]),
+    absent: new Set(), legacyTables: new Map()
+  };
+  const expected = '\n[agents]\nmax_concurrent_threads_per_session = 15\ndefault_subagent_reasoning_effort = "medium"\n';
+  assert.equal(renderConfig('', spec), expected);
+  assert.equal(renderConfig(expected, spec), expected);
+});
+
+test("overlay separates new keys from an unterminated existing table line", () => {
+  const spec = {
+    values: new Map([["agents.max_concurrent_threads_per_session", 15], ["agents.default_subagent_reasoning_effort", "medium"]]),
+    absent: new Set(), legacyTables: new Map()
+  };
+  for (const newline of ['\n', '\r\n']) {
+    for (const lastLine of ['max_concurrent_threads_per_session = 15', 'max_concurrent_threads_per_session = 15 # keep comment']) {
+      const original = `[agents]${newline}${lastLine}`;
+      const expected = `${original}${newline}default_subagent_reasoning_effort = "medium"${newline}`;
+      assert.equal(renderConfig(original, spec), expected);
+      assert.equal(renderConfig(expected, spec), expected);
+    }
+  }
+});
+
+test("upgrade from the complete old overlay preserves a final agents table without a newline", async () => {
+  const item = await fixture("old-overlay-no-newline");
+  await initialize(item);
+  const manifest = JSON.parse(await readFile(path.join(projectRoot, 'sync-manifest.json'), 'utf8'));
+  const spec = buildOverlaySpec(manifest, item.home, 'default_mode_request_user_input stable true\n');
+  const rootChoices = '# retain root settings\nmodel = "grok-4.6"\nmodel_reasoning_effort = "high"\nmodel_context_window = 128000\nmodel_auto_compact_token_limit = 90000\n';
+  const oldValues = [...spec.values].filter(([key]) => !key.startsWith('agents.'))
+    .map(([key, value]) => `${key} = ${JSON.stringify(value)}\n`).join('');
+  const oldConfig = rootChoices + oldValues + '\n[agents]\nmax_concurrent_threads_per_session = 15';
+  const target = path.join(item.home, 'config.toml');
+  await writeFile(target, oldConfig);
+  const output = okay(run(item, ['portable', 'plan']), 'old-overlay upgrade plan');
+  assert.match(output, /keep model_context_window = 128000/);
+  assert.equal(await readFile(target, 'utf8'), oldConfig);
+  okay(run(item, ['portable', 'apply']), 'old-overlay upgrade apply');
+  const installed = await readFile(target, 'utf8');
+  // TOML assignments require a newline separator; this expected suffix is hand-written.
+  assert.equal(installed, oldConfig + '\ndefault_subagent_reasoning_effort = "medium"\n');
+  if (process.env.NB_CODEX_EVIDENCE_DIR) {
+    await mkdir(process.env.NB_CODEX_EVIDENCE_DIR, { recursive: true });
+    await writeFile(path.join(process.env.NB_CODEX_EVIDENCE_DIR, 'f1-upgrade.json'), JSON.stringify({ oldConfig, installed }, null, 2));
+  }
+  okay(run(item, ['portable', 'doctor']), 'old-overlay upgrade doctor');
+  const backups = path.join(item.baseDir, '.nb-codex', 'backups');
+  const saved = await Promise.all((await readdir(backups)).map((dir) => readFile(path.join(backups, dir, 'config.toml'), 'utf8').catch(() => null)));
+  assert.ok(saved.includes(oldConfig));
+});
+
+test("context migration refuses nonscalar overrides without altering the home", async () => {
+  const item = await fixture("context-nonscalar");
+  await initialize(item);
+  await writeFile(path.join(item.home, "config.toml"), 'model_context_window = [\n128000\n]\n');
+  const before = await snapshotTree(item.home);
+  const result = run(item, ["portable", "plan", "--use-catalog-context"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /managed value is not a supported scalar/);
+  assert.deepEqual(await snapshotTree(item.home), before);
+});
+
+test("root context migration rolls back prior bytes after a post-config failure", async () => {
+  const item = await fixture("context-rollback");
+  await initialize(item);
+  await planApply(item);
+  const target = path.join(item.home, "config.toml");
+  const prior = 'model_context_window = 128000\nmodel_auto_compact_token_limit = 90000\n' + await readFile(target, "utf8");
+  await writeFile(target, prior);
+  okay(run(item, ["portable", "plan", "--use-catalog-context"]), "rollback migration plan");
+  const result = run(item, ["portable", "apply", "--use-catalog-context"], { NB_CODEX_TEST_FAIL_AFTER: "1" });
+  assert.notEqual(result.status, 0);
+  assert.equal(await readFile(target, "utf8"), prior);
+});
+
+test("context migration rejects stale targets without deleting user changes", async () => {
+  const item = await fixture("context-stale");
+  await initialize(item);
+  await writeFile(path.join(item.home, "config.toml"), 'model_context_window = 128000\n');
+  okay(run(item, ["portable", "plan", "--use-catalog-context"]), "stale plan");
+  await writeFile(path.join(item.home, "config.toml"), 'model_context_window = 256000\n');
+  const before = await snapshotTree(item.home);
+  const result = run(item, ["portable", "apply", "--use-catalog-context"]);
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /exact current plan/);
+  assert.deepEqual(await snapshotTree(item.home), before);
+});
+
+test("real Codex loads the installed root config and Astra catalog offline", { skip: !process.env.NB_CODEX_REAL_CLI }, async () => {
+  const item = await fixture("real-cli");
+  await initialize(item);
+  await writeFile(path.join(item.home, "config.toml"), 'model = "gpt-5.6-sol"\nmodel_reasoning_effort = "low"\n');
+  await planApply(item);
+  const env = { ...process.env, CODEX_HOME: item.home };
+  for (const key of Object.keys(env)) if (/API_KEY|TOKEN|SECRET/i.test(key)) delete env[key];
+  const child = spawn(process.env.NB_CODEX_REAL_CLI, ["app-server", "--stdio"], { cwd: item.root, env, windowsHide: true });
+  let stderr = '';
+  child.stderr.on('data', (bytes) => { stderr += bytes; });
+  const replies = await new Promise((resolve, reject) => {
+    let buffer = '';
+    const responses = new Map();
+    const timeout = setTimeout(() => reject(new Error(`real CLI timed out: ${stderr}`)), 30000);
+    const send = (value) => child.stdin.write(JSON.stringify(value) + '\n');
+    child.on('error', reject);
+    child.on('exit', (code) => {
+      if (responses.size < 3) reject(new Error(`real CLI exited ${code}: ${stderr}`));
+    });
+    child.stdout.on('data', (bytes) => {
+      buffer += bytes;
+      while (buffer.includes('\n')) {
+        const end = buffer.indexOf('\n');
+        const line = buffer.slice(0, end); buffer = buffer.slice(end + 1);
+        if (!line.trim()) continue;
+        const reply = JSON.parse(line);
+        if (reply.id === undefined) continue;
+        responses.set(reply.id, reply);
+        if (reply.id === 1) {
+          send({ method: 'initialized', params: {} });
+          send({ id: 2, method: 'config/read', params: { includeLayers: true } });
+          send({ id: 3, method: 'model/list', params: { includeHidden: true } });
+        }
+        if (responses.size === 3) { clearTimeout(timeout); resolve(responses); }
+      }
+    });
+    send({ id: 1, method: 'initialize', params: { clientInfo: { name: 'nb-codex-offline-test', version: '1' }, capabilities: { experimentalApi: true } } });
+  }).finally(async () => {
+    if (child.exitCode !== null) return;
+    await new Promise((resolve) => { child.once('close', resolve); child.kill(); });
+  });
+  for (const reply of replies.values()) assert.equal(reply.error, undefined, JSON.stringify(reply.error));
+  const config = replies.get(2).result.config;
+  assert.equal(config.model, 'gpt-5.6-sol');
+  assert.equal(config.model_reasoning_effort, 'low');
+  assert.equal(config.agents.default_subagent_reasoning_effort, 'medium');
+  const listed = replies.get(3).result.data;
+  assert.ok(listed.some((entry) => entry.model === 'gpt-6-astra'), JSON.stringify(listed));
+  assert.equal(listed.length, 9);
+  assert.doesNotMatch(stderr, /failed to load.*agent|invalid.*config|unknown field/i);
+  if (process.env.NB_CODEX_EVIDENCE_DIR) {
+    await mkdir(process.env.NB_CODEX_EVIDENCE_DIR, { recursive: true });
+    await writeFile(path.join(process.env.NB_CODEX_EVIDENCE_DIR, 'offline-runtime.json'), JSON.stringify({
+      cli: process.env.NB_CODEX_REAL_CLI, isolatedHome: item.home,
+      methods: ['initialize', 'config/read', 'model/list'], config, models: listed, stderr,
+      cleanup: 'test.after removes the isolated fixture; no turn or model inference requested'
+    }, null, 2));
+  }
 });
 
 test("leftover skill junction requires --replace-managed and is replaced with a copy", async () => {

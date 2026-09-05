@@ -20,6 +20,8 @@ import {
   configOverlayValid as structuralConfigOverlayValid,
   managedConfigConflict as structuralManagedConfigConflict,
   renderConfig as renderStructuralConfig,
+  scanToml,
+  parseScalar,
 } from './toml-overlay.mjs';
 import { createDirectoryLinkSync, writeBackupBytesSync } from './runtime-fs.mjs';
 
@@ -565,7 +567,7 @@ export async function repairPortableLinks({ baseDir, config }) {
   return { removed, clean, sourceRepository: inspection.marker.sourceRepository, currentRepository: portable(baseDir) };
 }
 
-export async function createInstallPlan({ baseDir, config, replaceManaged = false, writePlan = true }) {
+export async function createInstallPlan({ baseDir, config, replaceManaged = false, useCatalogContext = false, writePlan = true }) {
   const { manifest, bytes: profileBytes, syncManifest, syncManifestBytes } = await loadPortableProfile(baseDir);
   await assertSafeExistingAncestors(config.codexHome, 'selected CODEX_HOME');
   await assertOrdinaryExistingDirectory(path.dirname(config.codexHome), 'selected CODEX_HOME parent');
@@ -607,10 +609,20 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
   const configObserved = await observeFile(configTarget);
   if (!['absent', 'file'].includes(configObserved.type)) fail(`config.toml target is not an ordinary file: ${configTarget}`);
   const currentConfig = configObserved.type === 'file' ? await readFile(configTarget, 'utf8') : '';
+  const contextKeys = new Set(['model_context_window', 'model_auto_compact_token_limit', 'model_auto_compact_token_limit_scope']);
+  const contextOverrides = scanToml(currentConfig).assignments
+    .filter((item) => contextKeys.has(item.path))
+    .map((item) => {
+      parseScalar(item.valueText);
+      return { path: item.path, previous: item.valueText, action: useCatalogContext ? 'remove' : 'keep' };
+    });
+  // Context consent is separate from replacement of bundled files and overlay values.
+  const ordinaryConflict = structuralManagedConfigConflict(currentConfig, spec);
+  if (useCatalogContext) for (const key of contextKeys) spec.absent.add(key);
   const desiredConfig = renderStructuralConfig(currentConfig, spec);
   const configHash = sha256(Buffer.from(desiredConfig));
   let configState = configObserved.type === 'absent' ? 'create' : configObserved.sha256 === configHash ? 'matching' : 'merge';
-  if (configState === 'merge' && structuralManagedConfigConflict(currentConfig, spec)) {
+  if (configState === 'merge' && ordinaryConflict) {
     if (!replaceManaged) fail(`managed config values differ; plan again with --replace-managed: ${configTarget}`);
     configState = 'replace-managed-overlay';
     replacements.push('config.toml');
@@ -652,6 +664,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
     selectedHome: portable(config.codexHome),
     codexCli: config.codexCli ? portable(config.codexCli) : 'PATH:codex',
     replaceManaged,
+    useCatalogContext,
   };
   const plan = {
     schemaVersion: 1,
@@ -678,7 +691,7 @@ export async function createInstallPlan({ baseDir, config, replaceManaged = fals
       observed: seed.observed,
       state: seed.state,
     }],
-    config: { target: configTarget, desiredSha256: configHash, observed: configObserved, state: configState },
+    config: { target: configTarget, desiredSha256: configHash, observed: configObserved, state: configState, contextOverrides },
     links,
     skillRoots: skillRoots.map((item) => ({
       relative: item.relative,
@@ -839,14 +852,17 @@ async function rollbackOperation(operation) {
   return `unknown rollback operation ${operation.kind}`;
 }
 
-export async function applyInstallPlan({ baseDir, config, replaceManaged = false }) {
+export async function applyInstallPlan({ baseDir, config, replaceManaged = false, useCatalogContext = false }) {
   const planPath = path.join(baseDir, INSTALL_PLAN_FILE);
   const prior = await readJson(planPath, 'prior install plan');
   if (prior.fingerprint !== fingerprint(prior)) fail('prior install plan fingerprint is invalid');
   if (prior.options?.replaceManaged !== replaceManaged) {
     fail('portable apply requires the same --replace-managed choice as the current plan; rerun portable plan with the intended choice, then portable apply with the same choice');
   }
-  const current = await createInstallPlan({ baseDir, config, replaceManaged, writePlan: false });
+  if (prior.options?.useCatalogContext !== useCatalogContext) {
+    fail('portable apply requires the same --use-catalog-context choice as the current plan; rerun portable plan and apply with the confirmed choice');
+  }
+  const current = await createInstallPlan({ baseDir, config, replaceManaged, useCatalogContext, writePlan: false });
   if (prior.fingerprint !== current.fingerprint) {
     fail('portable apply requires an exact current plan; run portable plan again, then portable apply');
   }

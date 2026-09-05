@@ -344,10 +344,14 @@ export function analyzeConfigOverlay(current, spec) {
     removals.add(assignments[0].index);
   }
   const insertions = new Map();
+  const missingSections = new Map();
   for (const entry of [...missing].sort((a, b) => a.path.split('.').length - b.path.split('.').length)) {
     const parts = entry.path.split('.');
     const section = parts.length === 1 ? '' : parts.slice(0, -1).join('.');
     const line = `${parts.at(-1)} = ${formatScalar(entry.value)}${document.newline}`;
+    missingSections.set(section, (missingSections.get(section) ?? '') + line);
+  }
+  for (const [section, line] of missingSections) {
     if (!section) {
       const firstHeader = document.headers[0]?.index ?? document.lines.length;
       const prefix = firstHeader === document.lines.length && document.lines.length && !document.lines.at(-1).endsWith('\n') ? document.newline : '';
@@ -355,8 +359,10 @@ export function analyzeConfigOverlay(current, spec) {
       continue;
     }
     const header = document.headers.find((candidate) => candidate.path === section);
-    if (header) appendInsertion(insertions, header.end, line);
-    else {
+    if (header) {
+      const prefix = header.end === document.lines.length && !document.lines.at(-1).endsWith('\n') ? document.newline : '';
+      appendInsertion(insertions, header.end, `${prefix}${line}`);
+    } else {
       const descendant = document.headers.find((candidate) => typeof candidate.path === 'string' && candidate.path.startsWith(`${section}.`));
       if (descendant) appendInsertion(insertions, descendant.index, `[${section}]${document.newline}${line}${document.newline}`);
       else {

@@ -1,69 +1,59 @@
 # 协助 AI 安装 nb-codex
 
-人类读者看仓库根目录 [`README.md`](../README.md)。你是协助安装的 AI，按本文操作。
+人类读者看 [`README.md`](../README.md)。协助安装的 AI 按以下步骤把提示词、七个角色、协作 skill 和模型目录装入用户选定的 Codex 目录。
 
-一次性 Codex 安装包。协助配置的 AI 在新电脑上把本包装进选定的 `CODEX_HOME`：直接覆盖根 system prompt、写入 `config.toml` 托管键、安装角色 / 协作 skill / 模型目录。全局 `AGENTS.md`：没有则安装器写入模板；已有则以本包模板为骨架并入用户条款，主要冲突再问用户。
+## 准备与询问
 
-本包写入：根提示词、七个编码角色、`codex-parallel-collab`、`models.json`、以及 `config.toml` 托管键。不写 provider 密钥，也不改根会话的模型、推理档位和上下文——那些留给用户 Codex 自己的默认值。
+前提：Git、Node.js 22+、支持本包角色字段的 Codex CLI 在 `PATH`。工作区还不是本仓库时，先 clone 用户给出的 GitHub URL。分支页 `https://github.com/<org>/<repo>/tree/<branch>` 对应 `git clone -b <branch> https://github.com/<org>/<repo>.git`，使用该分支。
 
-## 协助配置的 AI 要做什么
+1. 选定已有登录态使用的绝对 `CODEX_HOME`；没有则使用用户主目录下的 `.codex`。向用户说明安装位置。`--home` 是 Codex 目录，不是 clone 路径。命令在 clone 根目录执行；安装全程使用 `portable`，`status` / `diff` / `push` / `pull` 可能使用默认 home。
+2. 说明 `models.json` 必须整份覆盖为本包的 9 个模型，包含 Astra 和 Grok。根会话的 `model`、`model_reasoning_effort` 原样保留。Grok 需要用户已配置可用 provider；本包保留 provider / sandbox / MCP / hooks，不写密钥。角色模型与推理设置见下表，Fast 和更高推理档会影响用量。
+3. 通读目标 `config.toml`。发现顶层 `model_context_window`、`model_auto_compact_token_limit` 或 `model_auto_compact_token_limit_scope` 时，列出旧值，说明它们会覆盖目录窗口、压缩线或改变压缩统计范围。默认推荐删除这些覆盖、采用下表的按模型策略，但必须明确询问，得到确认后才使用 `--use-catalog-context`。无确认或用户拒绝时保留旧值，可以继续其它安装；不要把其它文件的替换确认当作上下文确认。保留时说明根会话仍使用这些覆盖，目录策略未完整生效。另查启动参数 `-c`、项目配置和外部配置层是否覆盖同类设置；本安装器只迁移所选 home 的顶层键，其它来源先说明并单独询问。
+4. 目标已有 `AGENTS.md` 时，通读它与模板，向用户说明将以模板为骨架合并、哪些有效用户条款保留、有哪些实质冲突，然后明确询问。即使没有冲突，也要得到合并确认后才写。拒绝或未答复则保持原文件，可以继续其它安装；后续恢复见 [`agents-merge.md`](agents-merge.md)。目标不存在时留给安装器写模板，不要预写。
 
-前提：Git、Node.js 22+、Codex CLI 在 `PATH`。工作区还不是本仓库时，先 clone 用户给出的 GitHub URL。若是 `https://github.com/<org>/<repo>/tree/<branch>` 这种分支页，用 `git clone -b <branch> https://github.com/<org>/<repo>.git`，不要 clone 默认分支。下列 `node` 命令在该 clone 的根目录执行。`--home` 是 Codex 目录，不是 clone 路径。不要问要不要 clone。`portable init` 从不擅自选择 `~/.codex`；必须把这台机器上的绝对路径传给 `--home`。`status` / `diff` / `push` / `pull` 仍可能落到 `~/.codex`，那不是这条安装路径。
+| 模型 | 自动压缩阈值 | 声明窗口 | 默认角色 |
+| --- | --- | --- | --- |
+| Astra / Sol | 320000 | 400000 | Astra：implement / frontend / research 使用可覆盖的 medium；reviewer 固定 high；think 固定 xhigh |
+| Terra / Luna | 650000 | 750000 | Luna：explore / worker_lite 固定 max + priority（Fast） |
+| Grok | 保留目录默认 | 400000 | 可由用户选择作为根模型 |
 
-有冲突再问，没冲突就装。不要把安装做成确认题。apply 之前不要给空 home 预写 `AGENTS.md`。
+320k / 650k 指自动压缩阈值。Codex 会按声明窗口的 90% 限制该阈值；400k / 750k 为它留出余量。窗口声明不会增加服务端额度或保证 provider 接受长上下文。角色 TOML 固定各自窗口与压缩线；根会话默认读取目录，不写一个统一的全局阈值。
 
-对用户用白话说接下来会发生什么，不要念术语问卷。不要问「是否使用现有的 home」「是否同意覆盖 models.json」「是否删除 model_context_window」。可以说：
-
-> 我会装到你现在的 Codex 目录 `<绝对路径>`。模型列表会换成这一包里的 8 个；平时用哪个模型、思考打到哪档，我不动。有文件对不上再停下来跟你说。
-
-1. **自己选定 `CODEX_HOME`，不要问。** 已有 Codex 登录态就用那个绝对路径；没有就新建一个（常见是用户主目录下的 `.codex`）。跟用户说会装到哪里即可。这个绝对路径必须传给 `portable init --home`，安装器自己不会猜。
-2. **`models.json` 必须整份覆盖**：catalog 带 `grok-4.6`，给根会话选用。告诉用户会换成这一包的 8 个模型，窗口按 sol 300k、terra / luna 500k、grok 400k 来写；上游不一定认这个值。这是整份快照覆盖，不是只改窗口，也没有 skip。不要问同不同意覆盖。
-3. **根会话上下文走模型默认**：`config.toml` 不写 `model_context_window`，也不写自动压缩阈值。若目标 home 里已经有 `model_context_window`，建议用户删掉，让 Codex 用 catalog / 模型自己的窗口——当作装完后的说明，没有这项就不必提，也不要当成安装前必答。
-4. 根提示词、七个编码角色、`codex-parallel-collab` 逐文件复制、以及 `config.toml` 托管键都由后面的 `apply` 写入，不要先手拷。根提示词按字节覆盖 `prompts/system-prompt-neutral.md`；不要换成另一份更软或更短的 system prompt。角色 pin 写在各自 TOML 里，安装器整文件复制，不要在这里改 pin。`grok-4.6` 要在用户 `config.toml` 里自备 `model_providers` 才能打通，本包不代写 provider 密钥。
-5. 默认 overlay 写入：`model_instructions_file`、`model_catalog_json`、`agents.max_concurrent_threads_per_session`、multi-agent hint、`suppress_unstable_features_warning`、`features.default_mode_request_user_input`。根模型、推理档位、上下文不在写入面。另有一组 **absent**（存在则当漂移，授权替换后删除）：`stream_idle_timeout_ms`、顶层 `default_mode_request_user_input`、`features.js_repl`。`model_context_window` 不在 absent 里——安装器不代删，只建议用户自己拿掉。provider / sandbox / MCP / hooks 等其它键原样保留。
-6. 全局 `AGENTS.md`：安装器只在目标不存在时写入 [`templates/AGENTS.md`](../templates/AGENTS.md)。仅当 apply **之前** 目标已有该文件时，apply 之后以模板为骨架把用户条款搬进对应节；会改变 root 决策的主要冲突先列给用户裁决，得到回答前不要写、不要猜。做法见 [`docs/agents-merge.md`](agents-merge.md)。若目标 home 里已经存在本包不写入的旧角色或 `policies/` 文件，对照升级节处理；全新 home 跳过。
-7. 机械安装（跟用户说过会装到哪、会换模型列表之后，在本仓库 clone 的根目录跑）：
+## 计划与安装
 
 ```powershell
-# 用步骤 1 选定的绝对路径，不要省略 --home
 $env:CODEX_HOME = "<选定的绝对路径>"
-
 node scripts/sync-codex.mjs portable init --home $env:CODEX_HOME
 node scripts/sync-codex.mjs portable plan
-node scripts/sync-codex.mjs portable apply
+```
+
+Plan 不写目标 home；打印 fingerprint、变更数、上下文旧值及 `keep` / `remove`，并提示 `AGENTS.md` 是 `create` 还是 `keep-existing`。完整计划在仓库 `.nb-codex/install-plan.json`。已有托管文件或键不同会要求 `--replace-managed`：列明差异并询问，确认后用该参数重新 plan。只有已确认删除 root 上下文覆盖时才加 `--use-catalog-context`；两个参数可分别使用，也可组合。
+
+```powershell
+# 下例仅适用于用户已分别确认托管替换和上下文迁移
+node scripts/sync-codex.mjs portable plan --replace-managed --use-catalog-context
+node scripts/sync-codex.mjs portable apply --replace-managed --use-catalog-context
 node scripts/sync-codex.mjs portable doctor
 ```
 
-先看 plan 的 fingerprint 和变更数，再 apply。目标已有托管文件且内容不同时，整次 plan 拒绝：这时才问。用白话说「你原来的文件和这一包不一样，要按这一包换掉吗」；确认后再两边都加 `--replace-managed`。没撞上冲突就不要预演这句。plan 会打印 `AGENTS.md: create` 或 `keep-existing`；变更数不含已有 `AGENTS.md`。若 apply 前该文件已存在，机械安装结束后还要按 [`docs/agents-merge.md`](agents-merge.md) 合并。
+无托管冲突、无上下文迁移时直接 `portable apply`，再 `portable doctor`。Apply 必须与当前 plan 使用相同参数；期间源文件或目标变化会要求重新 plan。拒绝上下文迁移就省略 `--use-catalog-context`，其它替换仍按各自确认执行。拒绝托管替换则暂停该次安装，保留 home，待用户改变决定后重新 plan。已有 AGENTS 的合并确认不由这些参数代替；机械 apply 始终保留已有 AGENTS，由协助 AI 按合并指南另行备份、写入。
 
-Apply 只接受当前 `portable plan` 和相同的 `--replace-managed` 选择。被替换的字节留在仓库 `.nb-codex/backups/<invocation>/`。失败时回滚本次写入，并尽量恢复仍匹配本次写入的旧字节。`portable init` 绑定 home；`plan` / `apply` 用这次记录，不回退 `~/.codex`。
+## 写入与恢复
 
-装完后新开一个 Codex 会话，让 catalog、config 和自定义角色一起加载。仅当 apply **之前** 目标已有 `AGENTS.md` 时按 [`docs/agents-merge.md`](agents-merge.md) 以模板为骨架合并；未决的主要冲突不要落盘。
-
-## 安装器覆盖什么
-
-| 仓库路径 | 运行时路径 | 安装动作 |
-| --- | --- | --- |
-| `prompts/system-prompt-neutral.md` | `$CODEX_HOME/prompts/system-prompt-neutral.md` | 覆盖 |
-| `prompts/subagent-model-instructions.md` | `$CODEX_HOME/prompts/subagent-model-instructions.md` | 覆盖 |
-| `agents/*.toml` | `$CODEX_HOME/agents/*.toml` | 覆盖（提示词路径改成本次 home） |
-| `models.json` | `$CODEX_HOME/models.json` | 必须整份覆盖（含 Grok） |
-| `skills/codex-parallel-collab/` | `$CODEX_HOME/skills/codex-parallel-collab/` | 逐文件复制；装完不依赖本包路径 |
-| `config.toml` overlay | `$CODEX_HOME/config.toml` | 必须写入托管键；根模型 / 推理档位 / 上下文不在托管面内 |
-| `templates/AGENTS.md` | `$CODEX_HOME/AGENTS.md` | 安装器仅当目标不存在时写入；已有文件由协助 AI 按 [`docs/agents-merge.md`](agents-merge.md) 合并 |
-
-根提示词直接改 `prompts/system-prompt-neutral.md`。
-
-根会话的模型与推理档位由用户的 Codex 决定，本包不写也不删。根会话上下文也不写；若 `config.toml` 里已有 `model_context_window`，建议删掉、走 catalog 里的窗口。角色 pin 写死在各自 TOML 里。Grok 前提是本机已经配好 provider。
-
-## 指令层级
-
-一条规则一个 owner。读 [`docs/instruction-layers.md`](instruction-layers.md) 再决定一条规则进 system prompt、用户 AGENTS 还是 skill。
-
-## 校验
-
-| 改动 | 检查 |
+| 仓库路径或设置 | 安装动作 |
 | --- | --- |
-| 根提示词 | 直接读 `prompts/system-prompt-neutral.md`；行为主张另用新会话 |
-| 安装器 / overlay | `node --test --test-concurrency=1 scripts/*.test.mjs` |
-| 角色 TOML | 同上测试里的 pin / envelope 断言 |
+| `prompts/system-prompt-neutral.md` | 覆盖根提示词 |
+| `prompts/subagent-model-instructions.md` | 复制公共子代理提示词 |
+| `agents/*.toml` | 逐文件复制，提示词路径改为本次 home |
+| `models.json` | 整份覆盖，包含 Grok |
+| `skills/codex-parallel-collab/` | 逐文件复制；安装后不依赖 clone 路径 |
+| `model_instructions_file`、`model_catalog_json` | 指向本次 home 的文件 |
+| `agents.max_concurrent_threads_per_session`、`agents.default_subagent_reasoning_effort` | 并发 15、默认子代理推理 medium；未 pin effort 的角色可在派发时上调 |
+| multi-agent hint、支持的用户输入 feature | 写入本包配置 |
+| `stream_idle_timeout_ms`、顶层 `default_mode_request_user_input`、`features.js_repl` | 若存在，托管替换确认后删除 |
+| 三个 root 上下文覆盖键 | 仅在 `--use-catalog-context` 确认计划中删除 |
+| `templates/AGENTS.md` → `$CODEX_HOME/AGENTS.md` | 不存在则写入；已有则保持，询问后由 AI 合并 |
+
+被替换的原字节备份在仓库 `.nb-codex/backups/<invocation>/`。Apply 失败时回滚本次写入；若文件随后被其它进程修改，会保留新修改并报告未恢复项。手动恢复前先检查当前文件，选择对应 invocation 的备份，确认恢复范围后还原；`config.toml` 备份包含原上下文值及用户其它配置。恢复旧配置后重新 plan，按新的选择安装。
+
+装完报告实际 home、已安装内容、保留的上下文覆盖或未合并 AGENTS、备份位置及 doctor 结果。Doctor 校验托管文件和配置结构，不证明保留覆盖后的根会话已采用目录压缩线。新开一个 Codex 会话加载新配置。仓库移动后仍应可使用安装后的角色和 skill。

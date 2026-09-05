@@ -13,6 +13,7 @@
       { "path": "model_catalog_json", "homePath": "models.json" },
       { "path": "model_instructions_file", "homePath": "prompts/system-prompt-neutral.md" },
       { "path": "agents.max_concurrent_threads_per_session", "value": 15 },
+      { "path": "agents.default_subagent_reasoning_effort", "value": "medium" },
       {
         "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
         "value": "Delegation is available when the current global AGENTS.md amplifier test pays; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. Do not run explore to implement or frontend to reviewer as a ritual pipeline. This mode remains active until a later multi-agent mode developer message changes it."

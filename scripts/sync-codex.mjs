@@ -32,8 +32,8 @@ const usage = `Usage:
   node scripts/sync-codex.mjs push [--dry-run] [--force] [--home <path>]
   node scripts/sync-codex.mjs pull [--dry-run] [--force] [--home <path>]
   node scripts/sync-codex.mjs portable init --home <path> [--codex-cli <path>] [--reconfigure]
-  node scripts/sync-codex.mjs portable plan [--replace-managed]
-  node scripts/sync-codex.mjs portable apply [--replace-managed]
+  node scripts/sync-codex.mjs portable plan [--replace-managed] [--use-catalog-context]
+  node scripts/sync-codex.mjs portable apply [--replace-managed] [--use-catalog-context]
   node scripts/sync-codex.mjs portable doctor
   node scripts/sync-codex.mjs portable status
   node scripts/sync-codex.mjs portable repair-links
@@ -50,6 +50,7 @@ Options:
   --force      Allow overwriting reviewed drift or conflicts.
   --home PATH  Codex home. portable init requires --home or CODEX_HOME; it never defaults to ~/.codex.
   --replace-managed  Authorize replacement of managed drift in both portable plan and apply.
+  --use-catalog-context  After user confirmation, remove root context overrides in both portable plan and apply.
 `;
 
 function fail(message, code = 1) {
@@ -69,6 +70,7 @@ function parseArgs(argv) {
     home: process.env.CODEX_HOME || path.join(os.homedir(), ".codex"),
     homeExplicit: Boolean(process.env.CODEX_HOME),
     replaceManaged: false,
+    useCatalogContext: false,
     reconfigure: false,
     codexCli: null
   };
@@ -78,6 +80,7 @@ function parseArgs(argv) {
     if (arg === "--dry-run") options.dryRun = true;
     else if (arg === "--force") options.force = true;
     else if (arg === "--replace-managed") options.replaceManaged = true;
+    else if (arg === "--use-catalog-context") options.useCatalogContext = true;
     else if (arg === "--reconfigure") options.reconfigure = true;
     else if (arg === "--home") {
       const value = args.shift();
@@ -111,6 +114,9 @@ function parseArgs(argv) {
     fail("--replace-managed is valid only with portable plan/apply");
   }
   options.home = path.resolve(expandHome(options.home));
+  if (options.useCatalogContext && (command !== "portable" || !["plan", "apply"].includes(portableCommand))) {
+    fail("--use-catalog-context is valid only with portable plan/apply");
+  }
   if (options.codexCli) options.codexCli = path.resolve(options.codexCli);
   return options;
 }
@@ -1282,7 +1288,7 @@ async function runPortable(options) {
     fail(`explicit home does not match portable init: ${config.codexHome}`);
   }
   if (options.portableCommand === "plan") {
-    const plan = await createInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged });
+    const plan = await createInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged, useCatalogContext: options.useCatalogContext });
     const pending = plan.files.filter((item) => item.state !== "matching").length +
       (plan.seeds ?? []).filter((item) => item.state === "create").length +
       (plan.skillRoots ?? []).filter((item) => item.state === "replace-link-with-copy").length +
@@ -1291,16 +1297,19 @@ async function runPortable(options) {
     console.log(`portable plan: ${path.join(systemRoot, ".nb-codex", "install-plan.json")}`);
     console.log(`fingerprint:   ${plan.fingerprint}`);
     console.log(`changes:       ${pending}; selected home unchanged`);
+    for (const item of plan.config.contextOverrides) {
+      console.log(`root context:  ${item.action} ${item.path} = ${item.previous}; catalog policy: Astra/Sol compact at 320000, Terra/Luna at 650000`);
+    }
     const seed = (plan.seeds ?? [])[0];
     if (seed?.state === "keep-existing") {
-      console.log("AGENTS.md:     keep-existing; merge into templates/AGENTS.md per docs/agents-merge.md after apply");
+      console.log("AGENTS.md:     keep-existing; read existing rules and ask before merging per docs/agents-merge.md");
     } else if (seed?.state === "create") {
       console.log("AGENTS.md:     create");
     }
     return;
   }
   if (options.portableCommand === "apply") {
-    const applied = await applyInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged });
+    const applied = await applyInstallPlan({ baseDir: systemRoot, config, replaceManaged: options.replaceManaged, useCatalogContext: options.useCatalogContext });
     console.log(`portable apply: ${applied.files.length} managed files, ${applied.links.length} managed links`);
     console.log(`selected home:  ${config.codexHome}`);
     return;

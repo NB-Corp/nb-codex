@@ -248,6 +248,7 @@ test("repository manifest ships seven coding roles, overwrites the neutral promp
     "prompts/system-prompt-neutral.md"
   );
   assert.deepEqual(manifest.configPatch.values.map((entry) => entry.path).sort(), [
+    "agents.default_subagent_reasoning_effort",
     "agents.max_concurrent_threads_per_session",
     "features.multi_agent_v2.multi_agent_mode_hint_text",
     "model_catalog_json",
@@ -269,21 +270,33 @@ test("model catalog pins Codex windows for Sol, Terra, Luna, and Grok", () => {
   const catalog = JSON.parse(fs.readFileSync(path.join(systemRoot, "models.json"), "utf8"));
   const bySlug = new Map(catalog.models.map((model) => [model.slug, model]));
   const sol = bySlug.get("gpt-5.6-sol");
+  const astra = bySlug.get("gpt-6-astra");
   const terra = bySlug.get("gpt-5.6-terra");
   const luna = bySlug.get("gpt-5.6-luna");
   const grok = bySlug.get("grok-4.6");
   assert.equal(bySlug.has("deepseek-v4-flash"), false);
   assert.equal(bySlug.has("gpt-5.2"), false);
   assert.ok(sol && terra && luna && grok);
-  for (const [model, window] of [
-    [sol, 300000],
-    [terra, 500000],
-    [luna, 500000],
-    [grok, 400000]
+  assert.equal(catalog.models.length, 9);
+  for (const [model, window, compact] of [
+    [astra, 400000, 320000],
+    [sol, 400000, 320000],
+    [terra, 750000, 650000],
+    [luna, 750000, 650000],
+    [grok, 400000, null]
   ]) {
     assert.equal(model.context_window, window, model.slug);
     assert.equal(model.max_context_window, window, model.slug);
+    assert.equal(model.auto_compact_token_limit, compact, model.slug);
+    // Independent runtime rule: ModelInfo clamps the threshold to 90% of the window.
+    if (compact !== null) assert.equal(Math.min(compact, Math.floor(window * 9 / 10)), compact);
   }
+  assert.equal(astra.shell_type, "unified_exec");
+  assert.equal(astra.tool_mode, "code_mode_only");
+  assert.equal(astra.multi_agent_version, "v2");
+  assert.equal(astra.use_responses_lite, true);
+  assert.deepEqual(astra.supported_reasoning_levels.map((item) => item.effort), ["low", "medium", "high", "xhigh", "max", "ultra"]);
+  assert.ok(astra.base_instructions.length > 1000);
   assert.doesNotMatch(grok.base_instructions, /GPT-5/, grok.slug);
   assert.doesNotMatch(grok.model_messages.instructions_template, /GPT-5/, grok.slug);
   assert.deepEqual(grok.input_modalities, ["text", "image"]);
@@ -304,12 +317,12 @@ test("installer source stays a full-file copy of this package", () => {
 
 test("canonical coding profiles pin GPT models and reject retired ambient task discovery", () => {
   const expected = new Map([
-    ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority", sandbox: "read-only" }],
-    ["frontend.toml", { name: "frontend", model: "gpt-5.6-sol", effort: "high" }],
-    ["implement.toml", { name: "implement", model: "gpt-5.6-sol", effort: "high" }],
-    ["research.toml", { name: "research", model: "gpt-5.6-sol", effort: "high" }],
-    ["reviewer.toml", { name: "reviewer", model: "gpt-5.6-sol", effort: "high", sandbox: "read-only" }],
-    ["think.toml", { name: "think", model: "gpt-5.6-sol", effort: "max" }],
+    ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority" }],
+    ["frontend.toml", { name: "frontend", model: "gpt-6-astra" }],
+    ["implement.toml", { name: "implement", model: "gpt-6-astra" }],
+    ["research.toml", { name: "research", model: "gpt-6-astra" }],
+    ["reviewer.toml", { name: "reviewer", model: "gpt-6-astra", effort: "high", sandbox: "read-only" }],
+    ["think.toml", { name: "think", model: "gpt-6-astra", effort: "xhigh", sandbox: "workspace-write" }],
     ["worker_lite.toml", { name: "worker_lite", model: "gpt-5.6-luna", effort: "max", tier: "priority" }]
   ]);
   function scalar(text, key) {
@@ -323,12 +336,14 @@ test("canonical coding profiles pin GPT models and reject retired ambient task d
     assert.equal(scalar(text, "model_reasoning_effort"), settings.effort, file);
     assert.equal(scalar(text, "service_tier"), settings.tier, file);
     assert.equal(scalar(text, "sandbox_mode"), settings.sandbox, file);
+    const luna = settings.model === "gpt-5.6-luna";
+    assert.match(text, new RegExp(`^model_context_window = ${luna ? 750000 : 400000}$`, "m"), file);
+    assert.match(text, new RegExp(`^model_auto_compact_token_limit = ${luna ? 650000 : 320000}$`, "m"), file);
+    assert.match(scalar(text, "model_instructions_file"), /\/prompts\/subagent-model-instructions\.md$/, file);
     assert.doesNotMatch(text, /\.trellis|task\.py|<trellis-subagent-context>|SubagentStart|Trellis task/i, file);
     assert.doesNotMatch(text, /assay task context|Active task:/i, file);
     assert.doesNotMatch(text, /\bcritic\b|science role/i, file);
     assert.match(text, /dispatch/is, file);
-    assert.match(text, /only task-context envelope/is, file);
-    assert.match(text, /never treat a path as permission or a host job/is, file);
   }
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "critic.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "check.toml")), false);

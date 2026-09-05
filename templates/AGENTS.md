@@ -17,13 +17,18 @@
 
 维护的自定义角色只有这些：`explore`、`worker_lite`、`implement`、`frontend`、`think`、`research`、`reviewer`。
 
-- 子 agent 是主会话的放大器。正常规模的一轮工作完全不派应当是少数，但每次派发都要说得出收益：把勘察/检索噪声挡在主上下文之外、并行推进互不依赖的工作、引入主会话给不了的独立判断（`reviewer` 的候选审查）。收益不清楚就自己做。典型不派：一两轮工具调用能完成并验证的窄查读或小修改（已知路径/符号、两三个文件内）；主会话已深度载入上下文、判断密度高、要点难写成自包含 brief 的改动。不为派而派：不按文件切碎连贯切片，不把 `explore`→`implement`/`frontend`→`reviewer` 跑成每个任务的例行流水线。
+- **子 agent 是主会话的放大器。** 为真实并行收益、隔离大量阅读或执行、独立判断，或合格低价模型的成本收益而派发。收益清楚就利用，收益不清楚就自己做；不规定每轮必须派发或不派应当是少数。一两轮工具即可完成的工作直接做；复杂但连贯、判断密度高且上下文已充分的工作也可以由 root 完成。不按文件切碎连贯任务，不把 `explore`→`implement`/`frontend`→`reviewer` 串成固定流水线。
 - **Root fast path** 只在完整结果同时满足三项时成立：契约闭合（输入、目标、变换和成功标准来自用户、既定契约或权威源）；影响有界（对象、权限、owner 和风险边界已知）；可直接证明（定向确定性检查足以作答）。成立时只做必要前置检查、执行、定向证明和报告，不加 plan、委派、review 或 broad ritual。单行、单文件、严格串行、委派成本或紧急程度本身都不构成 fast path。
-- Fast path 不成立不等于必须并行。缺用户选择就打开 decision door。只有 ready、互不重叠且委派收益超过 brief / read / integration 固定成本的节点才组成 ownership DAG。若用户禁止 agent，root 可 inline 完成 non-fast work，但仍运行该工作需要的证据。不要在 receipt 或 review 后补 meaning-bearing patch。
-- 每个节点只有一个 active owner。Root 独占顶层与 peer DAG、integration-owner 选择、review admission、commit、外部行动和最终验收；这不要求 root 亲自实现已委派节点。Active owner 存续时，不 shadow 其读取、编辑、检查或判断；只等待、处理已完成 receipt、解决真实边界冲突，或执行预先声明且独立不重叠的 root 节点。Timeout 不是 takeover 证据；只有当前用户明确要求终止特定 agent 才可 interruption。
-- 只使用上列维护角色。禁止内置 `default` / `explorer` / `worker` 作为 fallback、别名或 prose 重建。`think` 只能下发 `explore` / `research` / `worker_lite`；`implement` 与 `frontend` 只能下发 `explore`；其他维护角色均为 leaf。UI 切片派 `frontend`。清楚的快切片派 `worker_lite`。`research` 只接会改决策的复杂调研，lookup 用搜索工具，代码地图用 `explore`。首选角色不可用时，只有另一维护角色的能力、权限和 topology 位置都适配才可替换，否则仅保留 root-fast work 或报告缺失能力。
-- 重大承诺前，把目标、范围与成功标准对着一手用户意图复述一遍；frame 真正存疑时派 `think` 做 analysis-only 审计。
-- Dispatch brief 必须自包含。路径是行为 allowlist，不扩展 host 权限。若节点产出 public artifact，brief 将 deliverable 与 private execution context 分开，并在 `Acceptance` 中路由到 runtime system prompt 的 `Public-Facing Content`；brief 与 receipt 字段都不是 artifact-ready prose。
+- Fast path 是轻量路径，root 也可以承担 non-fast work，并运行该工作需要的证据。首个开放语义的 candidate 写入前选定一个 implementation owner，可以是 root 或具名实现角色。缺用户选择就打开 decision door。只有 ready、互不重叠且收益超过交接与集成成本的节点才组成 ownership DAG。委派后不重做该节点；receipt 或 review 后的语义修复仍回原 owner。
+- 每个节点只有一个 active owner。Root 独占顶层与 peer DAG、integration-owner 选择、review admission、commit、外部行动和最终验收。委派不转移 root 与用户交流、回应新问题和解释取舍的责任，也不要求 root 亲自重写已委派的代码。Active owner 存续时，不 shadow 该节点的读取、编辑、检查或判断；继续用户沟通、处理已完成 receipt、解决真实边界冲突，或推进预先声明且独立不重叠的 root 节点。没有独立工作时按工具语义等待，不为保持忙碌重复调查。Timeout 不是 takeover 证据；只有当前用户明确要求终止特定 agent 才可 interruption。
+- Root 可派上列七角色；`implement` 可派 `explore` 和 `worker_lite`；`frontend`、`research` 仅可派 `explore`；`think`、`reviewer`、`explore`、`worker_lite` 均为 strict leaf，`think` 仅由 root 派发。禁止内置 `default` / `explorer` / `worker` 作为 fallback、别名或 prose 重建。首选角色不可用时，只有能力、权限和拓扑都适配的维护角色才可替换；否则 root 在有效授权内直接处理，或报告具体能力缺口。
+- 按责任选角色：`explore` 读取有界代码、文档、网页、论文和日志证据；`worker_lite` 承担大量常规修改或命令批次；`implement` 负责连贯实现和困难技术问题；`frontend` 负责值得独立委派的视觉与交互切片；`research` 负责综合调研、问题建模、定量分析与跨源综合；`reviewer` 负责独立判断；`think` 解决一个明确的高难未知。简单查询优先现有工具，小 UI 改动可由 root 直接完成。
+- `implement` 默认自己完成机械编辑与短命令；只有大量重复任务或大型、噪声明显的命令/测试批次才派 `worker_lite`。租约期间不重叠写入。Luna 角色固定 max / priority；`lite` 收窄职责，不限制正常的局部执行判断。
+- `research` 保留问题建模、关键证据核验和综合判断，可派 explore 读取独立证据分支。Explore 允许有据的局部解释。检索工具正常产生的 history、cache、下载和提取文件按授权工具产物处理，不因此授予产品文件修改权限。
+- `think` 默认 Astra xhigh，聚焦高难窄卡点。普通求解可在隔离 scratch 做有假设、资源边界和停止条件的小实验；明确只读/纯推理派发排除实验执行与写入。正式产品修改须 root 明确写入租约；共享状态、付费调用、远程任务、安装、服务、提交与发布仍需各自授权。Think 不接管完整实现、综合调研或独立审查。
+- 模型和上下文来自角色配置与模型目录，不凭模型名或 effort 推定权威。`implement`、`frontend`、`research` 的 effort 使用可临时覆盖的 medium 默认；`reviewer`、`think` 和 Luna 角色保留各自固定档位。Root 的模型与 effort 由用户选择。
+- 重大承诺前，用一手用户意图核对目标、范围与成功标准。实质 frame 疑问交给 `reviewer` 的 frame 模式；普通方案讨论和最终取舍由 root 接住，不因“需要想一想”派发 think。
+- Dispatch brief 用自然语言给出目标、owner、相关输入和已确认决定、读写与副作用边界、交付和可观察成功条件、停止或交回条件；仅在真实依赖或风险需要时补细节，不要求固定字段模板。路径是行为 allowlist，不扩展 host 权限。公开产物的 deliverable 与 private execution context 分开，遵循 runtime 的 `Public-Facing Content`。
 - Child receipt 是 parent-internal 记录，统一区分事实与推断。既有工作通过 reference 与已接受、会改变当前决策的字段传递，不粘贴 raw narrative receipt body。
 
 steering、takeover、successor、finding repair / recheck、shared-file integration 见下文「协作边界」。
@@ -40,7 +45,7 @@ steering、takeover、successor、finding repair / recheck、shared-file integra
 
 证据必须同时说明 **provenance 与 independent oracle**：谁或什么产生信号、输入与 candidate 边界是什么、oracle 如何独立于被验证的实现或文案得出期望、它能证明和不能证明什么。测试数量、命令成功、snapshot、golden text、hash 或作者自评本身都不是权威；只有独立 oracle 与当前 claim 对齐时才是证据。
 
-`reviewer` 只在 candidate verdict 处同时满足以下条件时派发：当前 verdict 存在独立判断可改变的实质问题；没有仍覆盖此 candidate / risk surface 的有效 review；review 席位能提供实现者证据之外的独立 oracle 或判断。不要因文件数、耗时、模型 effort、agent 完成、每次 repair 或协调者没亲跑命令而派发。确定性结构检查已经完整、无歧义地裁决当前 claim 时，无需再找 review。
+`reviewer` 的 candidate 模式只在同时满足以下条件时派发：当前 verdict 存在独立判断可改变的实质问题；没有仍覆盖此 candidate / risk surface 的有效 review；新审查能提供实现者证据之外的独立 oracle 或判断。Frame 模式仅在目标、范围、假设或验收存在实质疑问，且独立判断能改变下一承诺时使用。给直接用户证据和标为暂定的方案，不预填裁决。已参与设计或 frame 判断的实例不担任同方案首次独立 candidate reviewer；同一实例仅续作紧邻的 finding 复检。不要因文件数、耗时、effort、agent 完成或每次 repair 自动派发。确定性结构检查已完整裁决当前 claim 时无需额外 review。
 
 后续编辑只使它可能影响的证据失效。Repair 先重跑失败检查和最近邻；只有 shared schema、dependency、generated-source 或 integration contract 改变时才扩大范围。没有具体失效原因，不重复 broad command。所有验证按 changed path、current action 和 named failure scoped，不设固定 broad pre-commit 清单。
 

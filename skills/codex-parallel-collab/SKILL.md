@@ -13,15 +13,15 @@ metadata:
 
 | Need | Role | Topology |
 | --- | --- | --- |
-| 不熟悉代码的只读地图 | `explore` | leaf |
-| 范围清楚的快速执行 | `worker_lite` | leaf |
-| 实现一个连贯切片 | `implement` | 可租 `explore` |
+| 有界代码、文档、网页、论文或日志证据 | `explore` | leaf |
+| 大量常规修改或命令/测试批次 | `worker_lite` | leaf |
+| 连贯实现或困难技术问题 | `implement` | 可租 `explore`；大执行量时租 `worker_lite` |
 | UI 切片 | `frontend` | 可租 `explore` |
-| 难架构 / 根因 / 精细改动 | `think` | 可租 `explore` / `research` / `worker_lite` |
-| 一块会改决策的复杂调研 | `research` | leaf |
-| 独立 candidate 判断 | `reviewer` | leaf |
+| 高难窄卡点的推理、反例与小实验 | `think` | root-only leaf |
+| 综合调研、建模、定量分析与跨源综合 | `research` | 可租 `explore` |
+| 独立 frame / candidate / focused recheck | `reviewer` | leaf |
 
-lookup 用搜索工具，不要派 `research`。代码地图用 `explore`。`research` 贵，只接会改决策的问题块。UI 派 `frontend`。
+简单 lookup 用现有工具，大量有界阅读交给 `explore`。普通方案讨论由 root 接住，独立综合调研才派 `research`。视觉和交互是主要目标且值得委派时用 `frontend`；小 UI 工作可由 root 直接完成。`implement` 自己处理普通机械编辑和短命令，只有执行量或日志噪声明显值得分摊时才用 `worker_lite`。
 
 能力、sandbox、子角色 allowlist 以 `$CODEX_HOME/agents/<role>.toml` 为准。
 
@@ -38,13 +38,13 @@ ui_consumer       frontend    src/ui/**          api_contract        consumer sc
 integration       implement   shared registry    api, ui receipts    affected integration proof
 ```
 
-`ui_consumer` 必须是 `frontend`。非 UI 实现节点派 `implement`。
+例中的 `ui_consumer` 以视觉和交互为核心，使用 `frontend`。连贯技术切片可由 root 或 `implement` 负责，具体按委派收益和已选 owner 决定。
 
 节点是可独立验证的职责，不是文件。共享源和 integration owner 要标明。只有写入不相交的 ready 节点才一起跑。能由一个有能力的 owner 做完的连贯竖切，不要拆。
 
 ## 2. Dispatch
 
-普通 dispatch 把合同直接写进 `spawn_agent`：
+普通 dispatch 用自然语言把目标、owner、输入、权限边界、交付和停止条件写进 `spawn_agent`；不要求固定表单。复杂交接可参考：
 
 ```text
 Purpose: <one bounded outcome>
@@ -82,7 +82,7 @@ node | canonical agent path | state | dependency result | owned paths
 4. 派发新解锁、互不重叠的节点；
 5. 仍有活动依赖就继续等。
 
-`list_agents` 只用于真实的存活或 ownership 问题，不作例行轮询。steering、takeover、interruption 或超出节点的 delta，停下来走 AGENTS「协作边界」，不要用工具即兴发挥。`interrupt_agent` 只在当前用户明确要求终止那个特定 agent 时使用。
+`list_agents` 只用于真实的存活或 ownership 问题，不作例行轮询。Root 继续承担用户沟通，消化 child 回报并解释对当前任务的影响；新问题先按上下文回应，不把对话也交给 child。steering、takeover、interruption 或超出节点的 delta，走 AGENTS「协作边界」。`interrupt_agent` 只在当前用户明确要求终止那个特定 agent 时使用。
 
 ## 4. Integrate Shared Sources Once
 
@@ -98,7 +98,7 @@ DAG 汇合时，把已接受的 leaf receipt、当前共享文件 diff、生成�
 
 ## 5. Admit Review Only When It Can Change The Verdict
 
-套用 AGENTS 里的 review 准入。获准后只送一个中立连贯 candidate：目标/合约、精确最终 diff 或 artifact、带独立 oracle 出处的既有证据、残余缺口、findings-first 报告合同。不要编码期望 verdict。审查席是 `reviewer`。
+套用 AGENTS 里的 review 准入并明确模式。Frame audit 给直接用户意图、标为暂定的方案、实质疑问和可改变的承诺；candidate review 给目标/合约、精确最终 diff 或 artifact、带独立 oracle 出处的既有证据和残余缺口。审查席是 `reviewer`，不编码期望 verdict。参与过方案设计或 frame audit 的实例不担当同方案首次独立 candidate review。
 
 把已接受的稳定 finding ID 连同治理锚点、决策相关证据、须保留的任务事实、证明状态和验收，路由回实现 owner 谱系。Finding 正文不是面向读者的替换文案。立即 repair/recheck 循环走 AGENTS「协作边界」和下面的扩展 packet。不要在 root 侧做语义修复，也不要再开一轮全面 review。
 

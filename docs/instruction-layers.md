@@ -9,8 +9,8 @@
 | 载体 | 安装时 | 运行时责任 |
 | --- | --- | --- |
 | `prompts/system-prompt-neutral.md` | 覆盖用户根提示词 | 身份无关的工程底线、Root Continuity、授权 / 安全 / 诚实报告、Content And Tone Floor、public artifact 语义 |
-| `$CODEX_HOME/config.toml` 托管键 | 必须写入 | `model_instructions_file`、`model_catalog_json`、并发与具名 feature。不写根模型 / 推理 / 上下文。`model_context_window` 不托管；协助 AI 把已有该项当作装完后的说明建议删除，不要当成安装前必答 |
-| `templates/AGENTS.md` → 用户全局 `AGENTS.md` | 安装器仅当目标不存在时写入；已有则不覆盖。协助 AI 以模板为骨架并入用户条款，主要冲突再问 | 本地优先级、ownership、验证、工具路由、协作/验证边界 |
+| `$CODEX_HOME/config.toml` 托管键 | 写入安装配置 | `model_instructions_file`、`model_catalog_json`、并发、默认子代理推理 medium 与具名 feature。不写根模型 / 推理。已有 root 窗口、压缩阈值及统计范围覆盖由协助 AI 列出旧值，询问后用 `--use-catalog-context` 删除；拒绝则保留并继续其它安装 |
+| `templates/AGENTS.md` → 用户全局 `AGENTS.md` | 目标不存在时写入；已有则先通读、说明并询问，确认后以模板为骨架保留用户有效条款 | 本地优先级、ownership、验证、工具路由、协作/验证边界 |
 | `agents/` 与 `codex-parallel-collab` | 覆盖 / 复制 | 角色行为与协作工具步骤 |
 | 项目 `AGENTS.md` | 不碰 | 仓库局部规则 |
 
@@ -45,7 +45,7 @@
 | 全局 AGENTS（`templates/AGENTS.md`） | root 平面上拓扑与内置禁令的唯一规范性 owner。装进用户 home 后按用户全局文件口吻写，不自称安装器。 |
 | 子代理公共基线（`prompts/subagent-model-instructions.md`） | 子平面唯一的第二 owner：leaf 纪律与（因孩子未必读到全局 AGENTS 而需要的）内置类型禁令。不写作者工作区的 task 产品名、已退役角色名或 feature-flag 旁白。 |
 | README | 人类用户：这是什么、复制一句话让智能体安装。不写安装器命令、overlay 键名或协助 AI 问卷。 |
-| `docs/install-for-ai.md` | 协助 AI 的安装协议：选定绝对 CODEX_HOME、`--home`、有冲突再问没冲突就装、models.json 必须整份覆盖、根会话不写模型/推理档位/上下文、建议删掉已有 `model_context_window`、安装命令、覆盖表、校验表。作者 home 迁移放到**可观测条件句**（「若这些文件已存在，则删除」），不写进默认安装步骤。 |
+| `docs/install-for-ai.md` | 协助 AI 的安装协议：选定绝对 CODEX_HOME、`--home`、models.json 整份覆盖、根模型和推理档位保留、上下文覆盖询问后迁移、已有 AGENTS 询问后合并、分别拒绝后的继续与恢复方式、备份和验证。 |
 | 协助 AI 文档（`install-for-ai.md` 与 `agents-merge.md`） | 可以提及旧文件名，但必须包在以可观测状态为键的条件句里。 |
 
 文件存在或字节相等不证明语义或模型行为改善。

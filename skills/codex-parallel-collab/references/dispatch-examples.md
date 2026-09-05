@@ -5,10 +5,12 @@ the equivalent exposed fields while preserving named ownership and isolation.
 
 ## Single critical blocker
 
-Delegate a coherent root-cause investigation to `think` (or a narrower
-maintained custom role), with `agent_type` explicit and `fork_turns="none"`. The root
-then enters coordination-only waiting. It does not reproduce the bug hunt while
-the owner runs, even if one `wait_agent` call times out.
+Root may own a coherent root-cause investigation directly or delegate it to
+`implement` when separation is useful. Use `think` for one difficult unknown
+that blocks that owner, with enough evidence to solve the question and a clear
+handoff. Think remains a leaf; small reversible scratch experiments are allowed
+unless the dispatch is explicitly read-only or pure reasoning. Root continues
+the user conversation and independent work without duplicating the leased investigation.
 
 ## Complex vertical slice
 
@@ -30,8 +32,8 @@ review        reviewer     writes NONE             depends integrate receipt
 
 The `ui_consumer` node is `frontend`. Other implementation nodes are `implement`. If the UI and docs can consume the accepted contract independently, they may run together. The `integrate` owner starts after their
 overlapping ownership ends, alone edits the shared registry, and runs directly
-affected integration proof. The root remains coordination-only through that
-receipt. The single `review` node covers the integrated coherent milestone;
+affected integration proof. Root retains user communication and avoids overlapping
+implementation through that receipt. An admitted `review` node covers the integrated milestone;
 do not add a review seat for each leaf unless the always-loaded verification kernel
 admits separate review for genuinely independent risk domains.
 
@@ -45,7 +47,8 @@ ask explorers to edit and do not reread their full search trail.
 
 ## Context-cost routing
 
-Keep a three-line local edit inline. Delegate a large coherent implementation
+Keep a bounded local edit inline when its result can be checked directly. Root
+can also own complex coherent work with well-loaded context. Delegate an implementation
 when specialization, context isolation, or parallel readiness repays the fixed
 briefing, repository-read, verification, and integration cost. Prefer one
 capable owner over five file-based leaves.
@@ -53,9 +56,9 @@ capable owner over five file-based leaves.
 ## Frame doubt before a costly rewrite
 
 Before committing to a costly rewrite whose scope comes from an inferred
-diagnosis, dispatch `think` with an analysis-only brief: exact user intent,
+diagnosis, dispatch `reviewer` in frame mode: exact user intent,
 the proposed frame labeled provisional, and the decision that audit may
-change. Frame audit stays on `think` with an analysis-only brief; do not invent another review seat. Adopt a supported revision,
+change. Use a fresh instance for a later independent candidate review. Adopt a supported revision,
 reject it with counterevidence, or open a user decision door.
 
 ## Warm review repair loop
@@ -87,8 +90,8 @@ full review or second opinion.
 
 If a preferred maintained custom role is unavailable, use another maintained
 custom role only if its declared capabilities, permissions, and topology
-position fit the node. Otherwise report the capability gap or keep a genuinely
-small change inline. Never use the built-in `default`, `explorer`, or `worker`
+position fit the node. Otherwise report the capability gap or let root handle
+the work inside its authority. Never use the built-in `default`, `explorer`, or `worker`
 types as fallback and never reconstruct one through prose. A one-line config
 edit, three sequential migrations, or several files owned by one invariant are
 not parallel DAGs merely because multiple threads are available.
