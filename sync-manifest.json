@@ -16,7 +16,7 @@
       { "path": "agents.default_subagent_reasoning_effort", "value": "medium" },
       {
         "path": "features.multi_agent_v2.multi_agent_mode_hint_text",
-        "value": "Delegation is available when the current global AGENTS.md amplifier test pays; an explicit user request to spawn is not required. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. Do not run explore to implement or frontend to reviewer as a ritual pipeline. This mode remains active until a later multi-agent mode developer message changes it."
+        "value": "Actively use subagents as amplifiers when independent progress, context isolation, or qualified lower-cost execution repays delegation. Look for substantial reading suited to Luna explore and execution batches suited to Luna worker_lite while root keeps the user conversation and key decisions. Follow the current global AGENTS.md as the single authority for routine ownership, maintained custom-role eligibility, finite topology, and collaboration/verification edge protocols. Do not turn the roles into a ritual pipeline. This mode remains active until a later multi-agent mode developer message changes it."
       }
     ],
     "featureValues": [
@@ -44,7 +44,6 @@
       "ownership": "full-file",
       "roles": [
         { "name": "explore", "repo": "agents/explore.toml", "home": "agents/explore.toml" },
-        { "name": "frontend", "repo": "agents/frontend.toml", "home": "agents/frontend.toml" },
         { "name": "implement", "repo": "agents/implement.toml", "home": "agents/implement.toml" },
         { "name": "research", "repo": "agents/research.toml", "home": "agents/research.toml" },
         { "name": "reviewer", "repo": "agents/reviewer.toml", "home": "agents/reviewer.toml" },
@@ -64,11 +63,6 @@
       "repo": "agents/explore.toml",
       "home": "agents/explore.toml",
       "description": "Canonical profile for explore"
-    },
-    {
-      "repo": "agents/frontend.toml",
-      "home": "agents/frontend.toml",
-      "description": "Canonical profile for frontend"
     },
     {
       "repo": "agents/implement.toml",

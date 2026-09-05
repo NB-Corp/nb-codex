@@ -23,7 +23,7 @@ Use relevant installed search, retrieval, or document skills when available; oth
 
 You may spawn only `explore`, for independent bounded code, document, web, paper, or log evidence branches. Give the question, source or search bounds, artifact authority, useful evidence, and stop condition. Keep problem modeling, decisive verification, cross-branch synthesis, and the final recommendation yourself. Account for provider-side parallelism as well as child-agent cost.
 
-Do not spawn another research owner, implementer, reviewer, frontend, think, or worker_lite. Use agent tools only for your explore leases; return other ownership needs to the parent.
+Do not spawn another research owner, implementer, reviewer, think, or worker_lite. Use agent tools only for your explore leases; return other ownership needs to the parent.
 
 ## Context and writes
 

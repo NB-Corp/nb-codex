@@ -9,19 +9,18 @@ metadata:
 
 这是 nb-codex 的协作**方法与工具**。治理以全局 `AGENTS.md` 为准；本 skill 不改写拓扑、验证内核或边界协议。工具名按 Codex 硬编码：`spawn_agent`、`wait_agent`、`followup_task`、`send_message`、`list_agents`、`interrupt_agent`。
 
-维护角色（不要用内置 `default` / `explorer` / `worker`）。派发前过 AGENTS 放大器门：说得出收益才派，否则 root 自己做。不要把 `explore`→`implement`/`frontend`→`reviewer` 跑成例行流水线。
+维护角色（不要用内置 `default` / `explorer` / `worker`）。按 AGENTS 放大器原则主动寻找支援：大量阅读先考虑 Luna `explore`，大量执行先考虑 Luna `worker_lite`，保护 root 上下文并利用合格低价执行。收益清楚就派，root 同时保持用户沟通；不把角色串成例行流水线。
 
 | Need | Role | Topology |
 | --- | --- | --- |
 | 有界代码、文档、网页、论文或日志证据 | `explore` | leaf |
 | 大量常规修改或命令/测试批次 | `worker_lite` | leaf |
-| 连贯实现或困难技术问题 | `implement` | 可租 `explore`；大执行量时租 `worker_lite` |
-| UI 切片 | `frontend` | 可租 `explore` |
+| 前后端连贯实现或困难技术问题 | `implement` | 可租 `explore`；大执行量时租 `worker_lite` |
 | 高难窄卡点的推理、反例与小实验 | `think` | root-only leaf |
 | 综合调研、建模、定量分析与跨源综合 | `research` | 可租 `explore` |
 | 独立 frame / candidate / focused recheck | `reviewer` | leaf |
 
-简单 lookup 用现有工具，大量有界阅读交给 `explore`。普通方案讨论由 root 接住，独立综合调研才派 `research`。视觉和交互是主要目标且值得委派时用 `frontend`；小 UI 工作可由 root 直接完成。`implement` 自己处理普通机械编辑和短命令，只有执行量或日志噪声明显值得分摊时才用 `worker_lite`。
+简单 lookup 用现有工具，大量有界阅读交给 `explore`。普通方案讨论由 root 接住，独立综合调研才派 `research`。UI 由 root 或 `implement` 负责，保留实际渲染与交互验证。`implement` 自己处理普通机械编辑和短命令，只有执行量或日志噪声明显值得分摊时才用 `worker_lite`。
 
 能力、sandbox、子角色 allowlist 以 `$CODEX_HOME/agents/<role>.toml` 为准。
 
@@ -34,11 +33,11 @@ metadata:
 ```text
 node              owner       writes             depends             closing evidence
 api_contract      implement   src/api/**         none                focused contract tests
-ui_consumer       frontend    src/ui/**          api_contract        consumer scenario
+ui_consumer       implement   src/ui/**          api_contract        consumer scenario
 integration       implement   shared registry    api, ui receipts    affected integration proof
 ```
 
-例中的 `ui_consumer` 以视觉和交互为核心，使用 `frontend`。连贯技术切片可由 root 或 `implement` 负责，具体按委派收益和已选 owner 决定。
+例中的 `ui_consumer` 是独立 UI 切片，交给 `implement`。连贯技术切片可由 root 或 `implement` 负责，具体按委派收益和已选 owner 决定。
 
 节点是可独立验证的职责，不是文件。共享源和 integration owner 要标明。只有写入不相交的 ready 节点才一起跑。能由一个有能力的 owner 做完的连贯竖切，不要拆。
 
@@ -49,7 +48,7 @@ integration       implement   shared registry    api, ui receipts    affected in
 ```text
 Purpose: <one bounded outcome>
 Depends on: <accepted inputs/receipts or none>
-Owner: <explore|worker_lite|implement|frontend|think|research|reviewer>
+Owner: <explore|worker_lite|implement|think|research|reviewer>
 Edit allowlist: <soft behavioral paths or NONE>
 Read / write / forbidden scope: <clear boundaries>
 Inputs and decisions: <only current authoritative context>
@@ -60,7 +59,7 @@ Receipt: <follow the AGENTS receipt contract; add only node-specific fields>
 Stop: <completion, blocked decision, or safe handoff condition>
 ```
 
-稳定小写 `task_name`，显式 `agent_type`，可用时 `fork_turns="none"`。brief 必须自包含；不要传 raw 会话或期望结论。引用已接受的先前工作，只带会改变当前决策的已接受字段。
+稳定小写 `task_name`，显式 `agent_type`，可用时 `fork_turns="none"`。普通 `implement` 派发显式传 `reasoning_effort="low"`；需要更深推理时改传合适的更高档位。该角色不 pin effort，省略时会落到共享 medium 默认。brief 必须自包含；不要传 raw 会话或期望结论。引用已接受的先前工作，只带会改变当前决策的已接受字段。
 
 公开产物节点把 deliverable 与 private execution context 分开，`Acceptance` 路由到 runtime system prompt 的 `Public-Facing Content`。
 

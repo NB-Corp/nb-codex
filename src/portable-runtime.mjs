@@ -32,6 +32,7 @@ const RECEIPT_ROOT = '.nb-codex';
 const INSTALL_PLAN_FILE = `${RECEIPT_ROOT}/install-plan.json`;
 const HOME_MARKER_FILE = '.nb-codex-managed.json';
 const RETIRED_HOME_RELATIVES = [
+  'agents/frontend.toml',
   'agents/critic.toml',
   'agents/check.toml',
   'agents/executor.toml',
@@ -230,8 +231,8 @@ async function loadPortableProfile(baseDir) {
   if (seedRepo !== 'templates/AGENTS.md' || seedHome !== 'AGENTS.md') {
     fail('portable seed-if-absent must be templates/AGENTS.md → AGENTS.md');
   }
-  if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 8 || agentFiles.length !== 7 || coreSkills.length !== 1) {
-    fail('canonical manifest must resolve to 8 exact files, 7 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
+  if (fileByRepo.has('AGENTS.md') || fileByRepo.has(seedRepo) || exactFiles.length !== 8 || agentFiles.length !== 6 || coreSkills.length !== 1) {
+    fail('canonical manifest must resolve to 8 exact files, 6 coding agents, and 1 core skill; AGENTS.md is seed-if-absent');
   }
   if (Object.hasOwn(profile, 'externalComponents')) fail('portable profile must not declare externalComponents');
   return {
@@ -345,7 +346,7 @@ async function desiredRuntimeFiles(baseDir, manifest, config) {
     text = text.replace(anchor, `model_instructions_file = "${portable(config.codexHome)}/`);
     files.push({ relative: `agents/${name}`, source, bytes: Buffer.from(text), transform: 'absolute-prompt-path' });
   }
-  if (files.length !== 15) fail(`portable profile materialized an unexpected file count: ${files.length}`);
+  if (files.length !== 14) fail(`portable profile materialized an unexpected file count: ${files.length}`);
   return files;
 }
 

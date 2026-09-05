@@ -1,7 +1,7 @@
 name = "reviewer"
 description = "Independent read-only judge in one declared mode: frame audit, candidate review, or focused recheck. Evaluates primary intent and evidence; returns findings without self-fixing. Strict leaf."
 model = "gpt-6-astra"
-model_reasoning_effort = "high"
+model_reasoning_effort = "medium"
 model_context_window = 400000
 model_auto_compact_token_limit = 320000
 sandbox_mode = "read-only"
