@@ -16,11 +16,12 @@ metadata:
 | 有界代码、文档、网页、论文或日志证据 | `explore` | leaf |
 | 大量常规修改或命令/测试批次 | `worker_lite` | leaf |
 | 前后端连贯实现或困难技术问题 | `implement` | 可租 `explore`；大执行量时租 `worker_lite` |
+| 设计质量、状态、文案和交互为核心的 UI 切片 | `frontend` | 可租 `explore` |
 | 高难窄卡点的推理、反例与小实验 | `think` | root-only leaf |
 | 综合调研、建模、定量分析与跨源综合 | `research` | 可租 `explore` |
 | 独立 frame / candidate / focused recheck | `reviewer` | leaf |
 
-简单 lookup 用现有工具，大量有界阅读交给 `explore`。普通方案讨论由 root 接住，独立综合调研才派 `research`。UI 由 root 或 `implement` 负责，保留实际渲染与交互验证。`implement` 自己处理普通机械编辑和短命令，只有执行量或日志噪声明显值得分摊时才用 `worker_lite`。
+简单 lookup 用现有工具，大量有界阅读交给 `explore`。普通方案讨论由 root 接住，独立综合调研才派 `research`。值得独立委派的设计型 UI 优先用 `frontend`；给目标、验收、范围、设计系统和参考，不逐项预定布局与视觉。小 UI 或连贯技术切片仍可由 root / `implement` 负责，保留实际渲染与交互验证。`implement` 自己处理普通机械编辑和短命令，只有执行量或日志噪声明显值得分摊时才用 `worker_lite`。
 
 能力、sandbox、子角色 allowlist 以 `$CODEX_HOME/agents/<role>.toml` 为准。
 
@@ -33,11 +34,11 @@ metadata:
 ```text
 node              owner       writes             depends             closing evidence
 api_contract      implement   src/api/**         none                focused contract tests
-ui_consumer       implement   src/ui/**          api_contract        consumer scenario
+ui_consumer       frontend    src/ui/**          api_contract        consumer scenario
 integration       implement   shared registry    api, ui receipts    affected integration proof
 ```
 
-例中的 `ui_consumer` 是独立 UI 切片，交给 `implement`。连贯技术切片可由 root 或 `implement` 负责，具体按委派收益和已选 owner 决定。
+例中的 `ui_consumer` 是设计型独立 UI 切片，交给 `frontend`。连贯技术切片可由 root 或 `implement` 负责，具体按委派收益和已选 owner 决定。
 
 节点是可独立验证的职责，不是文件。共享源和 integration owner 要标明。只有写入不相交的 ready 节点才一起跑。能由一个有能力的 owner 做完的连贯竖切，不要拆。
 
@@ -48,7 +49,7 @@ integration       implement   shared registry    api, ui receipts    affected in
 ```text
 Purpose: <one bounded outcome>
 Depends on: <accepted inputs/receipts or none>
-Owner: <explore|worker_lite|implement|think|research|reviewer>
+Owner: <explore|worker_lite|implement|frontend|think|research|reviewer>
 Edit allowlist: <soft behavioral paths or NONE>
 Read / write / forbidden scope: <clear boundaries>
 Inputs and decisions: <only current authoritative context>

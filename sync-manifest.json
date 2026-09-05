@@ -44,6 +44,7 @@
       "ownership": "full-file",
       "roles": [
         { "name": "explore", "repo": "agents/explore.toml", "home": "agents/explore.toml" },
+        { "name": "frontend", "repo": "agents/frontend.toml", "home": "agents/frontend.toml" },
         { "name": "implement", "repo": "agents/implement.toml", "home": "agents/implement.toml" },
         { "name": "research", "repo": "agents/research.toml", "home": "agents/research.toml" },
         { "name": "reviewer", "repo": "agents/reviewer.toml", "home": "agents/reviewer.toml" },
@@ -63,6 +64,11 @@
       "repo": "agents/explore.toml",
       "home": "agents/explore.toml",
       "description": "Canonical profile for explore"
+    },
+    {
+      "repo": "agents/frontend.toml",
+      "home": "agents/frontend.toml",
+      "description": "Canonical profile for frontend"
     },
     {
       "repo": "agents/implement.toml",

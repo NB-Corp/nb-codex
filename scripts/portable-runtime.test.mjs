@@ -125,7 +125,7 @@ test("nb-codex identity, prompt, and seed-if-absent AGENTS contract", async () =
     return match[1];
   }
   const leafRoles = ["explore.toml", "think.toml", "reviewer.toml", "worker_lite.toml"];
-  const spawnCapableRoles = ["research.toml", "implement.toml"];
+  const spawnCapableRoles = ["research.toml", "implement.toml", "frontend.toml"];
   for (const file of leafRoles) {
     const text = await readFile(path.join(projectRoot, "agents", file), "utf8");
     developerInstructions(text, file);
@@ -295,7 +295,7 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   await planApply(item);
   const ownershipMarker = JSON.parse(await readFile(path.join(item.home, ".nb-codex-managed.json"), "utf8"));
   assert.equal(ownershipMarker.product, "nb-codex");
-  assert.equal(ownershipMarker.managedFiles.length, 15);
+  assert.equal(ownershipMarker.managedFiles.length, 16);
   assert.equal(ownershipMarker.managedFiles.includes("AGENTS.md"), false);
   assert.equal(ownershipMarker.managedFiles.includes("config.toml"), true);
   assert.equal(ownershipMarker.managedFiles.includes("agents/critic.toml"), false);
@@ -308,7 +308,7 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   assert.doesNotMatch(installed, /^model_context_window\s*=/m);
   assert.equal(await readFile(path.join(item.home, "AGENTS.md"), "utf8"), "# user-owned agents file\n");
   assert.equal(await readFile(path.join(item.home, "agents", "custom.toml"), "utf8"), "name = \"custom\"\n");
-  for (const name of ["explore", "implement", "research", "reviewer", "think", "worker_lite"]) {
+  for (const name of ["explore", "frontend", "implement", "research", "reviewer", "think", "worker_lite"]) {
     const text = await readFile(path.join(item.home, "agents", `${name}.toml`), "utf8");
     assert.match(text, new RegExp(item.home.replaceAll("\\", "/").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
   }
@@ -505,13 +505,11 @@ test("portable doctor warns about leftover retired agent files without failing",
   await initialize(item);
   await planApply(item);
   await writeFile(path.join(item.home, "agents", "worker-lite.toml"), "name = \"worker_lite\"\n");
-  const retiredFrontend = "name = \"frontend\"\n# user's retained customization\n";
-  await writeFile(path.join(item.home, "agents", "frontend.toml"), retiredFrontend);
   const doctor = okay(run(item, ["portable", "doctor"]), "portable doctor");
   assert.match(doctor, /portable doctor: ok/);
   assert.match(doctor, /leftover: agents\/worker-lite\.toml/);
-  assert.match(doctor, /leftover: agents\/frontend\.toml/);
-  assert.equal(await readFile(path.join(item.home, "agents", "frontend.toml"), "utf8"), retiredFrontend);
+  assert.doesNotMatch(doctor, /leftover: agents\/frontend\.toml/);
+  assert.match(await readFile(path.join(item.home, "agents", "frontend.toml"), "utf8"), /^name = "frontend"$/m);
 });
 
 test("an existing model_context_window is left unmanaged and is not deleted", async () => {

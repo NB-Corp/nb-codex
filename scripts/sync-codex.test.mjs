@@ -209,12 +209,13 @@ test("repository manifest does not ship a specialist-dispatch tombstone", () => 
   assert.equal(manifest.homeTombstones.some((entry) => entry.home === "agents/trellis-specialist-dispatch.md"), false);
 });
 
-test("repository manifest ships six coding roles, overwrites the neutral prompt, and seeds AGENTS.md only when absent", () => {
+test("repository manifest ships seven coding roles, overwrites the neutral prompt, and seeds AGENTS.md only when absent", () => {
   const manifest = JSON.parse(fs.readFileSync(path.join(systemRoot, "sync-manifest.json"), "utf8"));
   assert.equal("defaultHome" in manifest, false);
   const roles = manifest.agentSets.flatMap((set) => set.roles.map((role) => role.name)).sort();
   assert.deepEqual(roles, [
     "explore",
+    "frontend",
     "implement",
     "research",
     "reviewer",
@@ -226,6 +227,7 @@ test("repository manifest ships six coding roles, overwrites the neutral prompt,
   assert.equal(codingSet.ownership, "full-file");
   const flatCodingPaths = new Map([
     ["explore", "agents/explore.toml"],
+    ["frontend", "agents/frontend.toml"],
     ["implement", "agents/implement.toml"],
     ["research", "agents/research.toml"],
     ["reviewer", "agents/reviewer.toml"],
@@ -316,6 +318,7 @@ test("installer source stays a full-file copy of this package", () => {
 test("canonical coding profiles pin GPT models and reject retired ambient task discovery", () => {
   const expected = new Map([
     ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority" }],
+    ["frontend.toml", { name: "frontend", model: "gpt-6-astra" }],
     ["implement.toml", { name: "implement", model: "gpt-6-astra" }],
     ["research.toml", { name: "research", model: "gpt-6-astra" }],
     ["reviewer.toml", { name: "reviewer", model: "gpt-6-astra", effort: "medium", sandbox: "read-only" }],
@@ -351,7 +354,7 @@ test("canonical coding profiles pin GPT models and reject retired ambient task d
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker-lite.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker_gpt.toml")), false);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "worker_grok.toml")), false);
-  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "frontend.toml")), false);
+  assert.equal(fs.existsSync(path.join(systemRoot, "agents", "frontend.toml")), true);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "implement.toml")), true);
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "reviewer.toml")), true);
 });

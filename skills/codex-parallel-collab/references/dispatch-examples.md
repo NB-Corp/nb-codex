@@ -24,13 +24,13 @@ code-writing ownership of the critical path.
 
 ```text
 api_contract  implement    writes src/api/**       depends none
-ui_consumer   implement    writes src/ui/**        depends api_contract receipt
+ui_consumer   frontend     writes src/ui/**        depends api_contract receipt
 docs          implement    writes docs/feature.md  depends api_contract receipt
 integrate     implement    writes shared registry depends ui_consumer, docs
 review        reviewer     writes NONE             depends integrate receipt
 ```
 
-The implementation nodes use distinct `implement` instances. If the UI and docs can consume the accepted contract independently, they may run together. The `integrate` owner starts after their
+The design-led `ui_consumer` uses `frontend`; the other implementation nodes use distinct `implement` instances. If the UI and docs can consume the accepted contract independently, they may run together. The `integrate` owner starts after their
 overlapping ownership ends, alone edits the shared registry, and runs directly
 affected integration proof. Root retains user communication and avoids overlapping
 implementation through that receipt. An admitted `review` node covers the integrated milestone;

@@ -1,6 +1,6 @@
 # 协助 AI 安装 nb-codex
 
-人类读者看 [`README.md`](../README.md)。协助安装的 AI 按以下步骤把提示词、六个角色、协作 skill 和模型目录装入用户选定的 Codex 目录。
+人类读者看 [`README.md`](../README.md)。协助安装的 AI 按以下步骤把提示词、七个角色、协作 skill 和模型目录装入用户选定的 Codex 目录。
 
 ## 准备与询问
 
@@ -13,7 +13,7 @@
 
 | 模型 | 自动压缩阈值 | 声明窗口 | 默认角色 |
 | --- | --- | --- | --- |
-| Astra / Sol | 320000 | 400000 | Astra：implement 普通派发显式 low、可按次上调；research 默认 medium、可上调；reviewer 固定 medium；think 固定 xhigh |
+| Astra / Sol | 320000 | 400000 | Astra：implement 普通派发显式 low、可按次上调；frontend / research 默认 medium、可上调；reviewer 固定 medium；think 固定 xhigh |
 | Terra / Luna | 650000 | 750000 | Luna：explore / worker_lite 固定 max + priority（Fast） |
 | Grok | 保留目录默认 | 400000 | 可由用户选择作为根模型 |
 
