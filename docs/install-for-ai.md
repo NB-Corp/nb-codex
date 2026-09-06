@@ -13,13 +13,13 @@
 
 | 模型 | 自动压缩阈值 | 声明窗口 | 默认角色 |
 | --- | --- | --- | --- |
-| Astra / Sol | 320000 | 400000 | Astra：implement 普通派发显式 low、可按次上调；frontend / research 默认 medium、可上调；reviewer 固定 medium；think 固定 xhigh |
+| Astra / Sol | 320000 | 400000 | Sol：implement / research 默认 medium、可上调；Astra：frontend 默认 medium、可上调，reviewer 固定 medium，think 固定 xhigh |
 | Terra / Luna | 650000 | 750000 | Luna：explore / worker_lite 固定 max + priority（Fast） |
 | Grok | 保留目录默认 | 400000 | 可由用户选择作为根模型 |
 
 320k / 650k 指自动压缩阈值。Codex 会按声明窗口的 90% 限制该阈值；400k / 750k 为它留出余量。窗口声明不会增加服务端额度或保证 provider 接受长上下文。角色 TOML 固定各自窗口与压缩线；根会话默认读取目录，不写一个统一的全局阈值。
 
-`implement` 的 low 由派发参数指定，角色 TOML 不固定 effort，以便临时上调。Root 的 AGENTS 与协作 skill 要求普通派发显式传 `reasoning_effort="low"`；若省略，Codex 会使用共享 medium 默认。保留或自定义全局 AGENTS 时，也要保留这项派发约定。
+`implement`、`research` 的角色 TOML 固定 Sol，effort 保持可临时上调。普通派发省略 effort 时，Codex 使用本包配置的共享 medium 默认；也可显式传 `reasoning_effort="medium"`。升级已有全局 AGENTS 时，合并掉旧的 implement 普通派发显式 low 约定。
 
 ## 计划与安装
 

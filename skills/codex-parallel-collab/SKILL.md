@@ -60,7 +60,7 @@ Receipt: <follow the AGENTS receipt contract; add only node-specific fields>
 Stop: <completion, blocked decision, or safe handoff condition>
 ```
 
-稳定小写 `task_name`，显式 `agent_type`，可用时 `fork_turns="none"`。普通 `implement` 派发显式传 `reasoning_effort="low"`；需要更深推理时改传合适的更高档位。该角色不 pin effort，省略时会落到共享 medium 默认。brief 必须自包含；不要传 raw 会话或期望结论。引用已接受的先前工作，只带会改变当前决策的已接受字段。
+稳定小写 `task_name`，显式 `agent_type`，可用时 `fork_turns="none"`。`implement`、`research` 使用 Sol，普通派发省略 effort 使用共享 medium 默认，也可显式传 `reasoning_effort="medium"`；需要更深推理时改传合适的更高档位。两者不 pin effort。brief 必须自包含；不要传 raw 会话或期望结论。引用已接受的先前工作，只带会改变当前决策的已接受字段。
 
 公开产物节点把 deliverable 与 private execution context 分开，`Acceptance` 路由到 runtime system prompt 的 `Public-Facing Content`。
 

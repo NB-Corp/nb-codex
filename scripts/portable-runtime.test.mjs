@@ -311,7 +311,12 @@ test("portable core overwrites the root prompt and config.toml but does not repl
   for (const name of ["explore", "frontend", "implement", "research", "reviewer", "think", "worker_lite"]) {
     const text = await readFile(path.join(item.home, "agents", `${name}.toml`), "utf8");
     assert.match(text, new RegExp(item.home.replaceAll("\\", "/").replace(/[.*+?^${}()|[\]\\]/g, "\\$&")));
+    if (["implement", "research"].includes(name)) {
+      assert.match(text, /^model = "gpt-5.6-sol"$/m);
+      assert.doesNotMatch(text, /^model_reasoning_effort\s*=/m);
+    }
   }
+  assert.match(installed, /^default_subagent_reasoning_effort = "medium"$/m);
   for (const relative of [
     "models.json",
     "prompts/subagent-model-instructions.md", "prompts/system-prompt-neutral.md",

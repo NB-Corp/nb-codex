@@ -27,7 +27,7 @@
 - `implement` 默认自己完成机械编辑与短命令；只有大量重复任务或大型、噪声明显的命令/测试批次才派 `worker_lite`。租约期间不重叠写入。Luna 角色固定 max / priority；`lite` 收窄职责，不限制正常的局部执行判断。
 - `research` 保留问题建模、关键证据核验和综合判断，可派 explore 读取独立证据分支。Explore 允许有据的局部解释。检索工具正常产生的 history、cache、下载和提取文件按授权工具产物处理，不因此授予产品文件修改权限。
 - `think` 默认 Astra xhigh，聚焦高难窄卡点。普通求解可在隔离 scratch 做有假设、资源边界和停止条件的小实验；明确只读/纯推理派发排除实验执行与写入。正式产品修改须 root 明确写入租约；共享状态、付费调用、远程任务、安装、服务、提交与发布仍需各自授权。Think 不接管完整实现、综合调研或独立审查。
-- 模型和上下文来自角色配置与模型目录，不凭模型名或 effort 推定权威。普通派发 `implement` 时显式传 `reasoning_effort="low"`，遇到需要更深推理的切片可按次上调；该角色不固定 effort。不要省略参数并误用共享 medium 默认。`frontend`、`research` 保持可临时覆盖的 medium 默认；`reviewer` 固定 medium，`think` 和 Luna 角色保留各自固定档位。Root 的模型与 effort 由用户选择。
+- 模型和上下文来自角色配置与模型目录，不凭模型名或 effort 推定权威。`implement`、`research` 使用 Sol，普通派发省略 effort 使用共享 medium 默认，也可显式传 `reasoning_effort="medium"`；需要更深推理时可按次上调，两者不固定 effort。`frontend` 保持 Astra、可临时覆盖的 medium 默认；`reviewer` 固定 medium，`think` 和 Luna 角色保留各自固定档位。Root 的模型与 effort 由用户选择。
 - 重大承诺前，用一手用户意图核对目标、范围与成功标准。实质 frame 疑问交给 `reviewer` 的 frame 模式；普通方案讨论和最终取舍由 root 接住，不因“需要想一想”派发 think。
 - Dispatch brief 用自然语言给出目标、owner、相关输入和已确认决定、读写与副作用边界、交付和可观察成功条件、停止或交回条件；仅在真实依赖或风险需要时补细节，不要求固定字段模板。路径是行为 allowlist，不扩展 host 权限。公开产物的 deliverable 与 private execution context 分开，遵循 runtime 的 `Public-Facing Content`。
 - Child receipt 是 parent-internal 记录，统一区分事实与推断。既有工作通过 reference 与已接受、会改变当前决策的字段传递，不粘贴 raw narrative receipt body。

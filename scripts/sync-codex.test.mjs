@@ -319,8 +319,8 @@ test("canonical coding profiles pin GPT models and reject retired ambient task d
   const expected = new Map([
     ["explore.toml", { name: "explore", model: "gpt-5.6-luna", effort: "max", tier: "priority" }],
     ["frontend.toml", { name: "frontend", model: "gpt-6-astra" }],
-    ["implement.toml", { name: "implement", model: "gpt-6-astra" }],
-    ["research.toml", { name: "research", model: "gpt-6-astra" }],
+    ["implement.toml", { name: "implement", model: "gpt-5.6-sol" }],
+    ["research.toml", { name: "research", model: "gpt-5.6-sol" }],
     ["reviewer.toml", { name: "reviewer", model: "gpt-6-astra", effort: "medium", sandbox: "read-only" }],
     ["think.toml", { name: "think", model: "gpt-6-astra", effort: "xhigh", sandbox: "workspace-write" }],
     ["worker_lite.toml", { name: "worker_lite", model: "gpt-5.6-luna", effort: "max", tier: "priority" }]
@@ -359,15 +359,34 @@ test("canonical coding profiles pin GPT models and reject retired ambient task d
   assert.equal(fs.existsSync(path.join(systemRoot, "agents", "reviewer.toml")), true);
 });
 
-test("implement dispatch guidance selects low without disabling per-dispatch upgrades", () => {
-  const profile = fs.readFileSync(path.join(systemRoot, "agents", "implement.toml"), "utf8");
+test("Sol dispatch guidance selects medium without disabling per-dispatch upgrades", () => {
   const agents = fs.readFileSync(path.join(systemRoot, "templates", "AGENTS.md"), "utf8");
   const skill = fs.readFileSync(path.join(systemRoot, "skills", "codex-parallel-collab", "SKILL.md"), "utf8");
   const manifest = JSON.parse(fs.readFileSync(path.join(systemRoot, "sync-manifest.json"), "utf8"));
-  assert.doesNotMatch(profile, /^model_reasoning_effort\s*=/m);
-  assert.match(profile, /Dispatch with low reasoning by default/);
-  for (const text of [agents, skill]) assert.match(text, /reasoning_effort="low"/);
+  for (const name of ["implement", "research"]) {
+    const profile = fs.readFileSync(path.join(systemRoot, "agents", `${name}.toml`), "utf8");
+    assert.match(profile, /^model = "gpt-5.6-sol"$/m);
+    assert.doesNotMatch(profile, /^model_reasoning_effort\s*=/m);
+  }
+  for (const text of [agents, skill]) {
+    assert.match(text, /reasoning_effort="medium"/);
+    assert.doesNotMatch(text, /reasoning_effort="low"/);
+  }
   assert.equal(manifest.configPatch.values.find((entry) => entry.path === "agents.default_subagent_reasoning_effort").value, "medium");
+});
+
+test("implement rejects speculative validation and fallback scaffolding while preserving real contracts", () => {
+  const profile = fs.readFileSync(path.join(systemRoot, "agents", "implement.toml"), "utf8");
+  const start = profile.indexOf("## Keep the implementation direct");
+  const end = profile.indexOf("## Ownership and judgment");
+  assert.ok(start > profile.indexOf('developer_instructions = """') && start < end);
+  const rules = profile.slice(start, end);
+  assert.match(rules, /Do not add hashes/);
+  assert.match(rules, /Do not add speculative defensive programming/);
+  assert.match(rules, /Do not build chains of fallbacks/);
+  assert.match(rules, /Validate real untrusted inputs at their boundary/);
+  assert.match(rules, /preserve such existing contracts/);
+  assert.match(rules, /Preserve explicitly supported compatibility and recovery behavior/);
 });
 
 test("a missing tombstone target is clean in status and push dry-run", (t) => {

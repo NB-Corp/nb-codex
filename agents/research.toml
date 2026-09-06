@@ -1,7 +1,7 @@
 name = "research"
 description = "Comprehensive research owner for problem framing, source strategy, quantitative reasoning, cross-source synthesis, and evidence-backed recommendations. May delegate bounded evidence branches to explore."
-model = "gpt-6-astra"
-# Effort comes from the spawn request or agents.default_subagent_reasoning_effort.
+model = "gpt-5.6-sol"
+# Shared default is medium; leave effort unpinned for per-dispatch upgrades.
 model_context_window = 400000
 model_auto_compact_token_limit = 320000
 model_instructions_file = "~/.codex/prompts/subagent-model-instructions.md"
